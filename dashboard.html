@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Funnel Tracking Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0A0A0A;
+    color: #E0E0E0;
+    min-height: 100vh;
+  }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+  /* HEADER */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #1A1A1A;
+  }
+  .header-left h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: #FFFFFF;
+    letter-spacing: -0.5px;
+  }
+  .header-left p {
+    font-size: 13px;
+    color: #666;
+    margin-top: 4px;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #10B981;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .last-updated {
+    font-size: 12px;
+    color: #666;
+  }
+
+  /* TABS */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 24px;
+    background: #111;
+    border-radius: 10px;
+    padding: 4px;
+    width: fit-content;
+  }
+  .tab {
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #666;
+    background: transparent;
+    border: none;
+  }
+  .tab.active {
+    background: #FFFFFF;
+    color: #000000;
+  }
+  .tab:hover:not(.active) {
+    color: #CCC;
+  }
+
+  /* SECTIONS */
+  .section {
+    margin-bottom: 28px;
+  }
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: #555;
+    margin-bottom: 12px;
+    padding-left: 4px;
+  }
+
+  /* METRIC CARDS */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .metric-card {
+    background: #111;
+    border: 1px solid #1A1A1A;
+    border-radius: 12px;
+    padding: 18px;
+    transition: border-color 0.2s;
+  }
+  .metric-card:hover { border-color: #333; }
+  .metric-label {
+    font-size: 11px;
+    color: #777;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+  .metric-value {
+    font-size: 26px;
+    font-weight: 700;
+    color: #FFFFFF;
+    letter-spacing: -0.5px;
+  }
+  .metric-value.muted { color: #444; }
+  .metric-benchmark {
+    font-size: 11px;
+    margin-top: 6px;
+    color: #555;
+  }
+  .metric-status {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+  .status-good { background: #10B981; }
+  .status-warn { background: #F59E0B; }
+  .status-bad { background: #EF4444; }
+  .status-neutral { background: #444; }
+
+  /* KEYSTONE */
+  .keystone-card {
+    background: #111;
+    border: 1px solid #2A2A2A;
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .keystone-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px;
+    height: 100%;
+    background: #F59E0B;
+  }
+  .keystone-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .keystone-item {
+    padding: 16px;
+    background: #0A0A0A;
+    border-radius: 10px;
+    border: 1px solid #1A1A1A;
+  }
+  .keystone-label {
+    font-size: 10px;
+    color: #F59E0B;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .keystone-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #FFFFFF;
+  }
+
+  /* BOTTLENECK */
+  .bottleneck-container {
+    background: #111;
+    border: 1px solid #1A1A1A;
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .bottleneck-step {
+    display: flex;
+    align-items: center;
+    padding: 14px 0;
+    border-bottom: 1px solid #1A1A1A;
+  }
+  .bottleneck-step:last-child { border-bottom: none; }
+  .step-number {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #1A1A1A;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #666;
+    margin-right: 16px;
+    flex-shrink: 0;
+  }
+  .step-info { flex: 1; }
+  .step-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #DDD;
+  }
+  .step-detail {
+    font-size: 12px;
+    color: #555;
+    margin-top: 2px;
+  }
+  .step-value {
+    font-size: 18px;
+    font-weight: 700;
+    margin-right: 16px;
+    min-width: 80px;
+    text-align: right;
+  }
+  .step-benchmark {
+    font-size: 11px;
+    color: #555;
+    min-width: 100px;
+    text-align: right;
+  }
+
+  /* TABLE */
+  .table-container {
+    background: #111;
+    border: 1px solid #1A1A1A;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th {
+    background: #0A0A0A;
+    padding: 14px 16px;
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #666;
+    font-weight: 700;
+    border-bottom: 1px solid #1A1A1A;
+  }
+  td {
+    padding: 14px 16px;
+    font-size: 13px;
+    color: #CCC;
+    border-bottom: 1px solid #1A1A1A;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #0F0F0F; }
+  .table-value { font-weight: 600; color: #FFF; }
+
+  /* SETUP GUIDE */
+  .setup-card {
+    background: #111;
+    border: 1px solid #1A1A1A;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .setup-card h3 {
+    font-size: 15px;
+    color: #FFF;
+    margin-bottom: 12px;
+    font-weight: 700;
+  }
+  .setup-card p {
+    font-size: 13px;
+    color: #999;
+    line-height: 1.6;
+    margin-bottom: 8px;
+  }
+  .setup-card code {
+    background: #0A0A0A;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #F59E0B;
+    font-family: 'Courier New', monospace;
+  }
+  .setup-step {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #1A1A1A;
+  }
+  .setup-step:last-child { border-bottom: none; }
+  .step-badge {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: #1A1A1A;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #F59E0B;
+    flex-shrink: 0;
+  }
+  .step-text { flex: 1; }
+  .step-text strong { color: #FFF; font-size: 13px; }
+  .step-text span { color: #777; font-size: 12px; display: block; margin-top: 4px; }
+
+  /* EMPTY STATE */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #444;
+  }
+  .empty-state h2 {
+    font-size: 18px;
+    color: #666;
+    margin-bottom: 8px;
+  }
+  .empty-state p {
+    font-size: 13px;
+    color: #444;
+  }
+
+  /* CONTENT */
+  .content { display: none; }
+  .content.active { display: block; }
+
+  /* RESPONSIVE */
+  @media (max-width: 768px) {
+    .container { padding: 16px; }
+    .metrics-grid { grid-template-columns: 1fr 1fr; }
+    .header { flex-direction: column; gap: 12px; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <h1>Funnel Tracking Dashboard</h1>
+      <p>Live metrics from Meta Ads and sales team</p>
+    </div>
+    <div class="header-right">
+      <div class="live-dot"></div>
+      <span class="last-updated" id="lastUpdated">Loading...</span>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('daily')">Daily</button>
+    <button class="tab" onclick="switchTab('weekly')">Weekly</button>
+    <button class="tab" onclick="switchTab('monthly')">Monthly</button>
+    <button class="tab" onclick="switchTab('bottleneck')">Bottleneck Analysis</button>
+    <button class="tab" onclick="switchTab('setup')">Setup Guide</button>
+  </div>
+
+  <!-- DAILY -->
+  <div class="content active" id="daily">
+    <div class="section">
+      <div class="section-title">Ads Data (Meta / Facebook)</div>
+      <div class="metrics-grid" id="dailyAds"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Funnel Stats</div>
+      <div class="metrics-grid" id="dailyFunnel"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Sales Call Stats</div>
+      <div class="metrics-grid" id="dailySales"></div>
+    </div>
+  </div>
+
+  <!-- WEEKLY -->
+  <div class="content" id="weekly">
+    <div class="section">
+      <div class="section-title">Ads Data (Meta / Facebook)</div>
+      <div class="metrics-grid" id="weeklyAds"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Funnel Stats</div>
+      <div class="metrics-grid" id="weeklyFunnel"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Sales Call Stats</div>
+      <div class="metrics-grid" id="weeklySales"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Keystone Metrics (The Numbers That Matter Most)</div>
+      <div class="keystone-grid" id="weeklyKeystone"></div>
+    </div>
+  </div>
+
+  <!-- MONTHLY -->
+  <div class="content" id="monthly">
+    <div class="section">
+      <div class="section-title">Ads Data (Meta / Facebook)</div>
+      <div class="metrics-grid" id="monthlyAds"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Funnel Stats</div>
+      <div class="metrics-grid" id="monthlyFunnel"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Sales Call Stats</div>
+      <div class="metrics-grid" id="monthlySales"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Keystone Metrics</div>
+      <div class="keystone-grid" id="monthlyKeystone"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Closer Performance</div>
+      <div class="table-container" id="closersTable"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Setter Performance</div>
+      <div class="table-container" id="settersTable"></div>
+    </div>
+  </div>
+
+  <!-- BOTTLENECK -->
+  <div class="content" id="bottleneck">
+    <div class="section">
+      <div class="section-title">Bottleneck Analysis (Weekly Data)</div>
+      <div class="bottleneck-container" id="bottleneckList"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">How To Read This</div>
+      <div class="setup-card">
+        <p>Walk the funnel top to bottom. Find the ONE metric that contracted compared to last week. That's your bottleneck. Fix that one thing and leave everything else alone.</p>
+        <p style="margin-top:12px">Green dot = above benchmark. Yellow = close to benchmark. Red = below benchmark. Gray = no data yet.</p>
+        <p style="margin-top:12px">Do not change multiple variables at once or you'll never know what moved the needle. Fix one metric, measure for a week, then move to the next.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETUP -->
+  <div class="content" id="setup">
+    <div class="section">
+      <div class="section-title">How To Automate This Dashboard</div>
+      
+      <div class="setup-card">
+        <h3>Overview</h3>
+        <p>This dashboard reads from <code>dashboard_data.json</code>. You automate it by setting up Zapier zaps that push data into that file. Three data sources feed it: Meta Ads, your CRM (GHL), and your sales team.</p>
+      </div>
+
+      <div class="setup-card">
+        <h3>Zap 1: Meta Ads Data (Daily + Weekly + Monthly)</h3>
+        <div class="setup-step">
+          <div class="step-badge">1</div>
+          <div class="step-text">
+            <strong>Trigger: Schedule by Zapier (Daily at 9 AM)</strong>
+            <span>Runs once every morning to pull yesterday's ad data</span>
+          </div>
+        </div>
+        <div class="setup-step">
+          <div class="step-badge">2</div>
+          <div class="step-text">
+            <strong>Action: Facebook Ads (Find Ad Account Insights)</strong>
+            <span>Pull spend, impressions, link clicks, CPM, CTR for the previous day</span>
+          </div>
+        </div>
+        <div class="setup-step">
+          <div class="step-badge">3</div>
+          <div class="step-text">
+            <strong>Action: Webhooks by Zapier (POST)</strong>
+            <span>Send the data to your dashboard webhook endpoint. The dashboard updates <code>dashboard_data.json</code> automatically.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="setup-card">
+        <h3>Zap 2: GHL CRM Call Bookings (Real-Time)</h3>
+        <div class="setup-step">
+          <div class="step-badge">1</div>
+          <div class="step-text">
+            <strong>Trigger: GoHighLevel (New Appointment Booked)</strong>
+            <span>Fires every time someone books a call through your funnel</span>
+          </div>
+        </div>
+        <div class="setup-step">
+          <div class="step-badge">2</div>
+          <div class="step-text">
+            <strong>Action: Webhooks by Zapier (POST)</strong>
+            <span>Push booking data (name, source, setter, timestamp) to the dashboard</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="setup-card">
+        <h3>Zap 3: GHL CRM Call Dispositions (Real-Time)</h3>
+        <div class="setup-step">
+          <div class="step-badge">1</div>
+          <div class="step-text">
+            <strong>Trigger: GoHighLevel (Appointment Status Changed)</strong>
+            <span>Fires when a closer marks a call as showed, closed, or no-show</span>
+          </div>
+        </div>
+        <div class="setup-step">
+          <div class="step-badge">2</div>
+          <div class="step-text">
+            <strong>Action: Webhooks by Zapier (POST)</strong>
+            <span>Push disposition data (closer name, showed/no-show, closed/lost, deal value) to the dashboard</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="setup-card">
+        <h3>Zap 4: Payment / Revenue Collected (Real-Time)</h3>
+        <div class="setup-step">
+          <div class="step-badge">1</div>
+          <div class="step-text">
+            <strong>Trigger: Stripe / Payment Processor (New Payment)</strong>
+            <span>Fires when a customer pays. If you use a different processor, swap this trigger.</span>
+          </div>
+        </div>
+        <div class="setup-step">
+          <div class="step-badge">2</div>
+          <div class="step-text">
+            <strong>Action: Webhooks by Zapier (POST)</strong>
+            <span>Push revenue data (amount, customer, closer attribution) to the dashboard</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="setup-card">
+        <h3>Zap 5: Slack Daily Summary (Optional but Recommended)</h3>
+        <div class="setup-step">
+          <div class="step-badge">1</div>
+          <div class="step-text">
+            <strong>Trigger: Schedule by Zapier (Daily at 6 PM)</strong>
+            <span>End of day summary posted to your Slack channel</span>
+          </div>
+        </div>
+        <div class="setup-step">
+          <div class="step-badge">2</div>
+          <div class="step-text">
+            <strong>Action: Slack (Send Message)</strong>
+            <span>Posts daily spend, leads, calls booked, calls showed, calls closed, and cash collected to your team channel</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="setup-card">
+        <h3>What You Need To Do</h3>
+        <div class="setup-step">
+          <div class="step-badge">1</div>
+          <div class="step-text">
+            <strong>Set up the 5 Zapier zaps above</strong>
+            <span>Each one takes about 10 minutes. Start with Zap 1 (Meta Ads) since that's your primary channel.</span>
+          </div>
+        </div>
+        <div class="setup-step">
+          <div class="step-badge">2</div>
+          <div class="step-text">
+            <strong>Configure GHL to track call dispositions</strong>
+            <span>Make sure your closers are marking every call as showed, no-show, closed, or lost in GHL. This data feeds the dashboard automatically.</span>
+          </div>
+        </div>
+        <div class="setup-step">
+          <div class="step-badge">3</div>
+          <div class="step-text">
+            <strong>Tag every lead with its traffic source in GHL</strong>
+            <span>Use unique funnel URLs per channel so GHL can tag leads by source. This gives you per-channel ROAS instead of blended guessing.</span>
+          </div>
+        </div>
+        <div class="setup-step">
+          <div class="step-badge">4</div>
+          <div class="step-text">
+            <strong>Give each closer a unique calendar embed</strong>
+            <span>Each closer gets their own Calendly/GHL booking link in the funnel. This traces every deal back to the closer who closed it.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="setup-card">
+        <h3>Webhook Endpoint</h3>
+        <p>Point all your Zapier webhook actions to this URL:</p>
+        <p style="margin-top:8px"><code id="webhookUrl">Loading...</code></p>
+        <p style="margin-top:12px;color:#666;font-size:12px">The dashboard accepts POST requests with JSON data matching the structure in dashboard_data.json. Each zap updates its corresponding section automatically.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let dashboardData = null;
+
+// LOAD DATA
+async function loadData() {
+  try {
+    const response = await fetch('dashboard_data.json?t=' + Date.now());
+    dashboardData = await response.json();
+    renderAll();
+  } catch (e) {
+    console.error('Failed to load data:', e);
+    document.getElementById('lastUpdated').textContent = 'No data yet';
+  }
+}
+
+// FORMAT HELPERS
+function fmtMoney(v) {
+  if (!v && v !== 0) return '$0';
+  return '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+function fmtMoney2(v) {
+  if (!v && v !== 0) return '$0.00';
+  return '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtNum(v) {
+  if (!v && v !== 0) return '0';
+  return Number(v).toLocaleString('en-US');
+}
+function fmtPct(v) {
+  if (!v && v !== 0) return '0%';
+  return Number(v).toFixed(1) + '%';
+}
+function fmtX(v) {
+  if (!v && v !== 0) return '0x';
+  return Number(v).toFixed(2) + 'x';
+}
+function isEmpty(v) {
+  return v === 0 || v === null || v === undefined;
+}
+
+// STATUS HELPER
+function getStatus(value, benchmark, higherIsBetter = true) {
+  if (isEmpty(value)) return 'neutral';
+  if (higherIsBetter) {
+    if (value >= benchmark) return 'good';
+    if (value >= benchmark * 0.8) return 'warn';
+    return 'bad';
+  } else {
+    if (value <= benchmark) return 'good';
+    if (value <= benchmark * 1.2) return 'warn';
+    return 'bad';
+  }
+}
+
+function statusDot(status) {
+  return '<span class="metric-status status-' + status + '"></span>';
+}
+
+// RENDER METRIC CARD
+function metricCard(label, value, formatted, benchmarkText, status) {
+  return `
+    <div class="metric-card">
+      <div class="metric-label">${statusDot(status)}${label}</div>
+      <div class="metric-value ${isEmpty(value) ? 'muted' : ''}">${formatted}</div>
+      ${benchmarkText ? `<div class="metric-benchmark">${benchmarkText}</div>` : ''}
+    </div>
+  `;
+}
+
+// RENDER ADS SECTION
+function renderAds(data, elementId) {
+  const el = document.getElementById(elementId);
+  if (!el || !data) return;
+  const a = data;
+  el.innerHTML = 
+    metricCard('Ad Spend', a.spend, fmtMoney(a.spend), '', 'neutral') +
+    metricCard('Impressions', a.impressions, fmtNum(a.impressions), '', 'neutral') +
+    metricCard('CPM', a.cpm, fmtMoney2(a.cpm), '', 'neutral') +
+    metricCard('Link Clicks', a.link_clicks, fmtNum(a.link_clicks), '', 'neutral') +
+    metricCard('Link CTR', a.link_ctr, fmtPct(a.link_ctr), 'Target: 2%+', getStatus(a.link_ctr, 2.0, true)) +
+    metricCard('CPC', a.cpc, fmtMoney2(a.cpc), '', 'neutral') +
+    metricCard('Cost Per Lead', a.cost_per_lead, fmtMoney2(a.cost_per_lead), '', 'neutral') +
+    metricCard('Leads', a.leads, fmtNum(a.leads), '', 'neutral');
+}
+
+// RENDER FUNNEL SECTION
+function renderFunnel(data, elementId) {
+  const el = document.getElementById(elementId);
+  if (!el || !data) return;
+  const f = data;
+  el.innerHTML = 
+    metricCard('Page Views', f.page_views, fmtNum(f.page_views), '', 'neutral') +
+    metricCard('Form Submissions', f.form_submissions, fmtNum(f.form_submissions), '', 'neutral') +
+    metricCard('Page Conv. Rate', f.page_conversion_rate, fmtPct(f.page_conversion_rate), 'Target: 3-5%+', getStatus(f.page_conversion_rate, 3.0, true)) +
+    metricCard('Calls Booked', f.calls_booked, fmtNum(f.calls_booked), '', 'neutral') +
+    metricCard('Booking Rate', f.booking_rate, fmtPct(f.booking_rate), 'Target: 30%+', getStatus(f.booking_rate, 30.0, true));
+}
+
+// RENDER SALES SECTION
+function renderSales(data, elementId) {
+  const el = document.getElementById(elementId);
+  if (!el || !data) return;
+  const s = data;
+  el.innerHTML = 
+    metricCard('Calls Booked', s.calls_booked, fmtNum(s.calls_booked), '', 'neutral') +
+    metricCard('Calls Showed', s.calls_showed, fmtNum(s.calls_showed), '', 'neutral') +
+    metricCard('Show Rate', s.show_rate, fmtPct(s.show_rate), 'Target: 70%+', getStatus(s.show_rate, 70.0, true)) +
+    metricCard('Calls Closed', s.calls_closed, fmtNum(s.calls_closed), '', 'neutral') +
+    metricCard('Close Rate', s.close_rate, fmtPct(s.close_rate), 'Target: 25-30%+', getStatus(s.close_rate, 25.0, true)) +
+    metricCard('AOV', s.aov, fmtMoney(s.aov), '', 'neutral') +
+    metricCard('Revenue Collected', s.revenue_collected, fmtMoney(s.revenue_collected), '', 'neutral');
+}
+
+// RENDER KEYSTONE
+function renderKeystone(data, elementId) {
+  const el = document.getElementById(elementId);
+  if (!el || !data) return;
+  const k = data;
+  el.innerHTML = 
+    `<div class="keystone-item">
+      <div class="keystone-label">ROAS</div>
+      <div class="keystone-value">${fmtX(k.roas)}</div>
+    </div>` +
+    `<div class="keystone-item">
+      <div class="keystone-label">Cost Per Booked Call</div>
+      <div class="keystone-value">${fmtMoney2(k.cost_per_booked_call)}</div>
+    </div>` +
+    `<div class="keystone-item">
+      <div class="keystone-label">Cost Per Showed Call</div>
+      <div class="keystone-value">${fmtMoney2(k.cost_per_showed_call)}</div>
+    </div>` +
+    `<div class="keystone-item">
+      <div class="keystone-label">Cost Per Closed Deal</div>
+      <div class="keystone-value">${fmtMoney2(k.cost_per_closed_deal)}</div>
+    </div>` +
+    `<div class="keystone-item">
+      <div class="keystone-label">Collected $ / Booked Call</div>
+      <div class="keystone-value">${fmtMoney2(k.collected_per_booked_call)}</div>
+    </div>` +
+    `<div class="keystone-item">
+      <div class="keystone-label">Collected $ / Showed Call</div>
+      <div class="keystone-value">${fmtMoney2(k.collected_per_showed_call)}</div>
+    </div>`;
+}
+
+// RENDER BOTTLENECK
+function renderBottleneck() {
+  const el = document.getElementById('bottleneckList');
+  if (!el || !dashboardData) return;
+  
+  const w = dashboardData.weekly;
+  const b = dashboardData.benchmarks;
+  
+  const steps = [
+    { num: 1, name: 'CPM', value: w.ads.cpm, formatted: fmtMoney2(w.ads.cpm), benchmark: 'Track trend', status: 'neutral' },
+    { num: 2, name: 'Link CTR', value: w.ads.link_ctr, formatted: fmtPct(w.ads.link_ctr), benchmark: '2%+', status: getStatus(w.ads.link_ctr, b.link_ctr, true) },
+    { num: 3, name: 'Page Conversion Rate', value: w.funnel.page_conversion_rate, formatted: fmtPct(w.funnel.page_conversion_rate), benchmark: '3-5%+', status: getStatus(w.funnel.page_conversion_rate, b.page_conversion_rate, true) },
+    { num: 4, name: 'Show Rate', value: w.sales.show_rate, formatted: fmtPct(w.sales.show_rate), benchmark: '70%+', status: getStatus(w.sales.show_rate, b.show_rate, true) },
+    { num: 5, name: 'Close Rate', value: w.sales.close_rate, formatted: fmtPct(w.sales.close_rate), benchmark: '25-30%+', status: getStatus(w.sales.close_rate, b.close_rate, true) },
+    { num: 6, name: 'AOV', value: w.sales.aov, formatted: fmtMoney(w.sales.aov), benchmark: 'Track trend', status: 'neutral' },
+  ];
+  
+  el.innerHTML = steps.map(s => `
+    <div class="bottleneck-step">
+      <div class="step-number">${s.num}</div>
+      <div class="step-info">
+        <div class="step-name">${statusDot(s.status)}${s.name}</div>
+        <div class="step-detail">Benchmark: ${s.benchmark}</div>
+      </div>
+      <div class="step-value ${isEmpty(s.value) ? 'muted' : ''}">${s.formatted}</div>
+      <div class="step-benchmark">${s.benchmark}</div>
+    </div>
+  `).join('');
+}
+
+// RENDER CLOSER TABLE
+function renderClosers() {
+  const el = document.getElementById('closersTable');
+  if (!el || !dashboardData) return;
+  const closers = dashboardData.monthly.closers || [];
+  
+  if (closers.length === 0) {
+    el.innerHTML = '<div class="empty-state"><h2>No closer data yet</h2><p>Data appears once your closers log call dispositions in GHL</p></div>';
+    return;
+  }
+  
+  el.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Closer</th>
+          <th>Calls Booked</th>
+          <th>Calls Showed</th>
+          <th>Show Rate</th>
+          <th>Calls Closed</th>
+          <th>Close Rate</th>
+          <th>Revenue Collected</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${closers.map(c => `
+          <tr>
+            <td class="table-value">${c.name}</td>
+            <td>${fmtNum(c.calls_booked)}</td>
+            <td>${fmtNum(c.calls_showed)}</td>
+            <td>${fmtPct(c.show_rate)}</td>
+            <td>${fmtNum(c.calls_closed)}</td>
+            <td>${fmtPct(c.close_rate)}</td>
+            <td class="table-value">${fmtMoney(c.revenue_collected)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// RENDER SETTER TABLE
+function renderSetters() {
+  const el = document.getElementById('settersTable');
+  if (!el || !dashboardData) return;
+  const setters = dashboardData.monthly.setters || [];
+  
+  if (setters.length === 0) {
+    el.innerHTML = '<div class="empty-state"><h2>No setter data yet</h2><p>Data appears once your setters log bookings in GHL</p></div>';
+    return;
+  }
+  
+  el.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Setter</th>
+          <th>Outreach Sent</th>
+          <th>Calls Booked</th>
+          <th>Booking Rate</th>
+          <th>Show Rate of Booked</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${setters.map(s => `
+          <tr>
+            <td class="table-value">${s.name}</td>
+            <td>${fmtNum(s.outreach_sent)}</td>
+            <td>${fmtNum(s.calls_booked)}</td>
+            <td>${fmtPct(s.booking_rate)}</td>
+            <td>${fmtPct(s.show_rate)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// RENDER ALL
+function renderAll() {
+  if (!dashboardData) return;
+  
+  // Last updated
+  document.getElementById('lastUpdated').textContent = 'Updated ' + new Date(dashboardData.last_updated).toLocaleString();
+  
+  // Daily
+  renderAds(dashboardData.daily.ads, 'dailyAds');
+  renderFunnel(dashboardData.daily.funnel, 'dailyFunnel');
+  renderSales(dashboardData.daily.sales, 'dailySales');
+  
+  // Weekly
+  renderAds(dashboardData.weekly.ads, 'weeklyAds');
+  renderFunnel(dashboardData.weekly.funnel, 'weeklyFunnel');
+  renderSales(dashboardData.weekly.sales, 'weeklySales');
+  renderKeystone(dashboardData.weekly.keystone, 'weeklyKeystone');
+  
+  // Monthly
+  renderAds(dashboardData.monthly.ads, 'monthlyAds');
+  renderFunnel(dashboardData.monthly.funnel, 'monthlyFunnel');
+  renderSales(dashboardData.monthly.sales, 'monthlySales');
+  renderKeystone(dashboardData.monthly.keystone, 'monthlyKeystone');
+  renderClosers();
+  renderSetters();
+  
+  // Bottleneck
+  renderBottleneck();
+  
+  // Webhook URL
+  const webhookEl = document.getElementById('webhookUrl');
+  if (webhookEl) {
+    webhookUrl.textContent = window.location.origin + '/dashboard_data.json';
+  }
+}
+
+// TAB SWITCHING
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById(tab).classList.add('active');
+}
+
+// INIT
+loadData();
+// Refresh every 60 seconds
+setInterval(loadData, 60000);
+</script>
+</body>
+</html>
