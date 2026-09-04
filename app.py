@@ -187,6 +187,7 @@ def reset_data():
         if timeframe == "all":
             for tf in ("daily", "weekly", "monthly"):
                 reset_timeframe(dashboard_data, tf)
+            dashboard_data["eod_entries"] = []
         elif timeframe in ("daily", "weekly", "monthly"):
             reset_timeframe(dashboard_data, timeframe)
         else:
@@ -195,6 +196,32 @@ def reset_data():
         save_data(dashboard_data)
         return jsonify({"status": "success", "message": f"Reset {timeframe} data"}), 200
 
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/eod/clear", methods=["POST"])
+def clear_eod():
+    """Clear all EOD entries. Useful for removing test data."""
+    try:
+        dashboard_data = load_data()
+        dashboard_data["eod_entries"] = []
+        for tf in ("daily", "weekly", "monthly"):
+            if tf in dashboard_data and "sales" in dashboard_data[tf]:
+                for k in ("calls_assigned", "calls_booked", "calls_showed", "calls_closed",
+                          "cash_full_pay", "cash_payment_plans", "revenue_collected", "contract_value",
+                          "ad_revenue", "organic_revenue", "referral_revenue", "other_revenue",
+                          "ad_calls_showed", "organic_calls_showed", "ad_calls_closed", "organic_calls_closed",
+                          "show_rate", "close_rate", "aov"):
+                    dashboard_data[tf]["sales"][k] = 0
+            if tf in dashboard_data and "source" in dashboard_data[tf]:
+                for k in dashboard_data[tf]["source"]:
+                    dashboard_data[tf]["source"][k] = 0
+        if "monthly" in dashboard_data:
+            dashboard_data["monthly"]["closers"] = []
+        recalculate_keystones(dashboard_data)
+        save_data(dashboard_data)
+        return jsonify({"status": "success", "message": "All EOD entries cleared"}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -208,6 +235,354 @@ def status():
         "last_updated": data.get("last_updated", "never"),
         "data_file": DATA_FILE
     }), 200
+
+
+# ============================================================
+# ROUTES - EOD (END OF DAY) CLOSER REPORT FORM
+# ============================================================
+EOD_FORM_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EOD Report - Closer Form</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0a0a0a;color:#fff;padding:20px;max-width:600px;margin:0 auto}
+h1{text-align:center;font-size:24px;margin-bottom:8px;color:#fff}
+.sub{text-align:center;color:#888;font-size:14px;margin-bottom:24px}
+.field{margin-bottom:16px}
+label{display:block;font-size:13px;color:#aaa;margin-bottom:6px;font-weight:600}
+input,select,textarea{width:100%;padding:12px;border-radius:8px;border:1px solid #333;background:#111;color:#fff;font-size:16px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#3b82f6}
+.btn{width:100%;padding:16px;border:none;border-radius:10px;background:#3b82f6;color:#fff;font-size:18px;font-weight:700;cursor:pointer;margin-top:12px}
+.btn:hover{background:#2563eb}
+.btn:active{transform:scale(0.98)}
+.success{display:none;text-align:center;padding:40px 20px}
+.success h2{color:#22c55e;font-size:28px;margin-bottom:12px}
+.success p{color:#888;font-size:16px}
+.row{display:flex;gap:12px}
+.row .field{flex:1}
+@media(max-width:480px){.row{flex-direction:column;gap:0}}
+</style>
+</head>
+<body>
+<h1>Daily EOD Report</h1>
+<p class="sub">Fill this out at the end of each day</p>
+
+<div id="form-wrap">
+<form id="eodForm">
+
+<div class="field">
+<label>Closer Name *</label>
+<input type="text" name="closer_name" placeholder="Your name" required>
+</div>
+
+<div class="field">
+<label>Date *</label>
+<input type="date" name="date" required id="dateField">
+</div>
+
+<div class="row">
+<div class="field">
+<label>Lead Source *</label>
+<select name="source" required>
+<option value="">-- Select --</option>
+<option value="ads">Ads (Paid Traffic)</option>
+<option value="organic">Organic</option>
+<option value="referral">Referral</option>
+<option value="other">Other</option>
+</select>
+</div>
+<div class="field">
+<label>Calls Assigned</label>
+<input type="number" name="calls_assigned" placeholder="0" min="0" value="0">
+</div>
+</div>
+
+<div class="row">
+<div class="field">
+<label>Calls Showed Up *</label>
+<input type="number" name="calls_showed" placeholder="0" min="0" value="0" required>
+</div>
+<div class="field">
+<label>Calls Closed *</label>
+<input type="number" name="calls_closed" placeholder="0" min="0" value="0" required>
+</div>
+</div>
+
+<div class="field">
+<label>Cash Collected - Full Pay (&pound;)</label>
+<input type="number" name="cash_full_pay" placeholder="0" min="0" value="0" step="0.01">
+</div>
+
+<div class="field">
+<label>Cash Collected - Payment Plans (&pound;)</label>
+<input type="number" name="cash_payment_plans" placeholder="0" min="0" value="0" step="0.01">
+<small style="color:#666;font-size:12px">Monthly payments received today</small>
+</div>
+
+<div class="field">
+<label>Total Contract Value of Deals Closed (&pound;)</label>
+<input type="number" name="contract_value" placeholder="0" min="0" value="0" step="0.01">
+<small style="color:#666;font-size:12px">Full value of all deals closed today (incl payment plans)</small>
+</div>
+
+<div class="field">
+<label>Notes (optional)</label>
+<textarea name="notes" rows="3" placeholder="Anything worth noting..."></textarea>
+</div>
+
+<button type="submit" class="btn">Submit EOD Report</button>
+
+</form>
+</div>
+
+<div id="successMsg" class="success">
+<h2>EOD Submitted!</h2>
+<p>Your report has been recorded.</p>
+<p style="margin-top:20px"><button onclick="location.reload()" class="btn">Submit Another</button></p>
+</div>
+
+<script>
+document.getElementById('dateField').value = new Date().toISOString().split('T')[0];
+
+document.getElementById('eodForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const payload = {
+        closer_name: formData.get('closer_name'),
+        date: formData.get('date'),
+        source: formData.get('source'),
+        calls_assigned: parseInt(formData.get('calls_assigned') || 0),
+        calls_showed: parseInt(formData.get('calls_showed') || 0),
+        calls_closed: parseInt(formData.get('calls_closed') || 0),
+        cash_full_pay: parseFloat(formData.get('cash_full_pay') || 0),
+        cash_payment_plans: parseFloat(formData.get('cash_payment_plans') || 0),
+        contract_value: parseFloat(formData.get('contract_value') || 0),
+        notes: formData.get('notes') || ''
+    };
+
+    try {
+        const resp = await fetch('/eod/submit', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const result = await resp.json();
+        if (result.status === 'success') {
+            document.getElementById('form-wrap').style.display = 'none';
+            document.getElementById('successMsg').style.display = 'block';
+        } else {
+            alert('Error: ' + result.message);
+        }
+    } catch (err) {
+        alert('Error submitting: ' + err.message);
+    }
+});
+</script>
+</body>
+</html>"""
+
+
+@app.route("/eod")
+def eod_form():
+    """Serve the EOD form for closers."""
+    return EOD_FORM_HTML
+
+
+@app.route("/eod/submit", methods=["POST"])
+def eod_submit():
+    """Handle EOD form submission from closers."""
+    try:
+        payload = request.get_json(force=True, silent=True)
+        if not payload:
+            return jsonify({"status": "error", "message": "No data received"}), 400
+
+        closer_name = payload.get("closer_name", "").strip()
+        date_str = payload.get("date", "")
+        source = payload.get("source", "").strip().lower()
+
+        if not closer_name:
+            return jsonify({"status": "error", "message": "Closer name required"}), 400
+        if not date_str:
+            return jsonify({"status": "error", "message": "Date required"}), 400
+        if source not in ("ads", "organic", "referral", "other"):
+            return jsonify({"status": "error", "message": "Valid source required"}), 400
+
+        entry = {
+            "closer_name": closer_name,
+            "date": date_str,
+            "source": source,
+            "calls_assigned": int(payload.get("calls_assigned", 0) or 0),
+            "calls_showed": int(payload.get("calls_showed", 0) or 0),
+            "calls_closed": int(payload.get("calls_closed", 0) or 0),
+            "cash_full_pay": float(payload.get("cash_full_pay", 0) or 0),
+            "cash_payment_plans": float(payload.get("cash_payment_plans", 0) or 0),
+            "contract_value": float(payload.get("contract_value", 0) or 0),
+            "notes": payload.get("notes", ""),
+            "submitted_at": datetime.now(timezone.utc).isoformat()
+        }
+
+        dashboard_data = load_data()
+
+        if "eod_entries" not in dashboard_data:
+            dashboard_data["eod_entries"] = []
+
+        dashboard_data["eod_entries"].append(entry)
+
+        recalculate_eod_aggregates(dashboard_data)
+        recalculate_derived_metrics(dashboard_data)
+        recalculate_keystones(dashboard_data)
+
+        save_data(dashboard_data)
+
+        return jsonify({
+            "status": "success",
+            "message": f"EOD recorded for {closer_name} on {date_str}",
+            "entry_count": len(dashboard_data.get("eod_entries", []))
+        }), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/eod")
+def api_eod():
+    """Return all EOD entries as JSON for the dashboard to consume."""
+    data = load_data()
+    entries = data.get("eod_entries", [])
+    return jsonify({"entries": entries, "count": len(entries)}), 200
+
+
+# ============================================================
+# EOD AGGREGATE CALCULATIONS
+# ============================================================
+def recalculate_eod_aggregates(dashboard_data):
+    """Aggregate all EOD entries into sales data for each timeframe."""
+    entries = dashboard_data.get("eod_entries", [])
+    if not entries:
+        return
+
+    from collections import defaultdict
+    from datetime import datetime as dt, timedelta
+    import copy
+
+    today = dt.now(timezone.utc).date()
+    week_ago = today - timedelta(days=7)
+    month_ago = today - timedelta(days=30)
+
+    # Helper to build source + sales aggregation for a set of entries
+    def aggregate(entry_list):
+        result = {
+            "calls_assigned": 0, "calls_booked": 0, "calls_showed": 0, "calls_closed": 0,
+            "cash_full_pay": 0, "cash_payment_plans": 0, "revenue_collected": 0, "contract_value": 0,
+            "ad_revenue": 0, "organic_revenue": 0, "referral_revenue": 0, "other_revenue": 0,
+            "ad_calls_showed": 0, "organic_calls_showed": 0, "ad_calls_closed": 0, "organic_calls_closed": 0,
+            "closer_breakdown": {},
+        }
+        for entry in entry_list:
+            source = entry.get("source", "other")
+            showed = entry.get("calls_showed", 0) or 0
+            closed = entry.get("calls_closed", 0) or 0
+            full_pay = entry.get("cash_full_pay", 0) or 0
+            pay_plans = entry.get("cash_payment_plans", 0) or 0
+            revenue = full_pay + pay_plans
+
+            result["calls_assigned"] += entry.get("calls_assigned", 0) or 0
+            result["calls_showed"] += showed
+            result["calls_closed"] += closed
+            result["cash_full_pay"] += full_pay
+            result["cash_payment_plans"] += pay_plans
+            result["revenue_collected"] += revenue
+            result["contract_value"] += entry.get("contract_value", 0) or 0
+
+            if source == "ads":
+                result["ad_revenue"] += revenue
+                result["ad_calls_showed"] += showed
+                result["ad_calls_closed"] += closed
+            elif source == "organic":
+                result["organic_revenue"] += revenue
+                result["organic_calls_showed"] += showed
+                result["organic_calls_closed"] += closed
+            elif source == "referral":
+                result["referral_revenue"] += revenue
+            else:
+                result["other_revenue"] += revenue
+
+            closer = entry.get("closer_name", "Unknown")
+            if closer not in result["closer_breakdown"]:
+                result["closer_breakdown"][closer] = {
+                    "calls_showed": 0, "calls_closed": 0, "revenue": 0,
+                    "cash_full_pay": 0, "cash_payment_plans": 0
+                }
+            result["closer_breakdown"][closer]["calls_showed"] += showed
+            result["closer_breakdown"][closer]["calls_closed"] += closed
+            result["closer_breakdown"][closer]["revenue"] += revenue
+            result["closer_breakdown"][closer]["cash_full_pay"] += full_pay
+            result["closer_breakdown"][closer]["cash_payment_plans"] += pay_plans
+
+        result["calls_booked"] = result["calls_assigned"]
+        return result
+
+    # Filter entries by timeframe
+    today_entries = [e for e in entries if e.get("date", "") == today.isoformat()]
+    week_entries = []
+    month_entries = []
+    for e in entries:
+        try:
+            ed = dt.fromisoformat(e.get("date", "")).date()
+        except (ValueError, TypeError):
+            continue
+        if ed >= week_ago:
+            week_entries.append(e)
+        if ed >= month_ago:
+            month_entries.append(e)
+
+    # Aggregate
+    daily_agg = aggregate(today_entries)
+    weekly_agg = aggregate(week_entries)
+    monthly_agg = aggregate(month_entries)
+
+    # Write sales + source into each timeframe
+    for tf, agg in [("daily", daily_agg), ("weekly", weekly_agg), ("monthly", monthly_agg)]:
+        if tf not in dashboard_data:
+            dashboard_data[tf] = {}
+
+        # Sales (excluding closer_breakdown)
+        sales_clean = {k: v for k, v in agg.items() if k != "closer_breakdown"}
+        dashboard_data[tf]["sales"] = sales_clean
+
+        # Source breakdown
+        dashboard_data[tf]["source"] = {
+            "ad_revenue": agg["ad_revenue"],
+            "organic_revenue": agg["organic_revenue"],
+            "referral_revenue": agg["referral_revenue"],
+            "other_revenue": agg["other_revenue"],
+            "ad_calls_showed": agg["ad_calls_showed"],
+            "organic_calls_showed": agg["organic_calls_showed"],
+            "ad_calls_closed": agg["ad_calls_closed"],
+            "organic_calls_closed": agg["organic_calls_closed"],
+        }
+
+    # Closer breakdown for monthly
+    dashboard_data.setdefault("monthly", {})
+    dashboard_data["monthly"]["closers"] = []
+    for name, stats in monthly_agg["closer_breakdown"].items():
+        showed = stats["calls_showed"]
+        closed = stats["calls_closed"]
+        revenue = stats["revenue"]
+        dashboard_data["monthly"]["closers"].append({
+            "name": name,
+            "calls_booked": showed,
+            "calls_showed": showed,
+            "calls_closed": closed,
+            "show_rate": round((showed / showed * 100), 2) if showed else 0,
+            "close_rate": round((closed / showed * 100), 2) if showed else 0,
+            "revenue_collected": revenue,
+            "cash_full_pay": stats["cash_full_pay"],
+            "cash_payment_plans": stats["cash_payment_plans"],
+        })
 
 
 # ============================================================

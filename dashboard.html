@@ -364,6 +364,7 @@
       <p>Live metrics from Meta Ads and sales team</p>
     </div>
     <div class="header-right">
+      <a href="/eod" style="font-size:13px;color:#3b82f6;text-decoration:none;font-weight:600;margin-right:16px">EOD Form</a>
       <div class="live-dot"></div>
       <span class="last-updated" id="lastUpdated">Loading...</span>
     </div>
@@ -392,6 +393,10 @@
       <div class="section-title">Sales Call Stats</div>
       <div class="metrics-grid" id="dailySales"></div>
     </div>
+    <div class="section">
+      <div class="section-title">Revenue Source Breakdown (Ads vs Organic)</div>
+      <div class="metrics-grid" id="dailySource"></div>
+    </div>
   </div>
 
   <!-- WEEKLY -->
@@ -412,6 +417,10 @@
       <div class="section-title">Keystone Metrics (The Numbers That Matter Most)</div>
       <div class="keystone-grid" id="weeklyKeystone"></div>
     </div>
+    <div class="section">
+      <div class="section-title">Revenue Source Breakdown (Ads vs Organic)</div>
+      <div class="metrics-grid" id="weeklySource"></div>
+    </div>
   </div>
 
   <!-- MONTHLY -->
@@ -431,6 +440,10 @@
     <div class="section">
       <div class="section-title">Keystone Metrics</div>
       <div class="keystone-grid" id="monthlyKeystone"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Revenue Source Breakdown (Ads vs Organic)</div>
+      <div class="metrics-grid" id="monthlySource"></div>
     </div>
     <div class="section">
       <div class="section-title">Closer Performance</div>
@@ -625,12 +638,12 @@ async function loadData() {
 
 // FORMAT HELPERS
 function fmtMoney(v) {
-  if (!v && v !== 0) return '$0';
-  return '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  if (!v && v !== 0) return '£0';
+  return '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 function fmtMoney2(v) {
-  if (!v && v !== 0) return '$0.00';
-  return '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (!v && v !== 0) return '£0.00';
+  return '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function fmtNum(v) {
   if (!v && v !== 0) return '0';
@@ -699,11 +712,16 @@ function renderFunnel(data, elementId) {
   if (!el || !data) return;
   const f = data;
   el.innerHTML = 
-    metricCard('Page Views', f.page_views, fmtNum(f.page_views), '', 'neutral') +
+    metricCard('Page Loads', f.page_loads, fmtNum(f.page_loads), '', 'neutral') +
+    metricCard('Visitors', f.visitors, fmtNum(f.visitors), '', 'neutral') +
+    metricCard('Plays', f.plays, fmtNum(f.plays), '', 'neutral') +
+    metricCard('Play Rate', f.play_rate, fmtPct(f.play_rate), 'Target: 20%+', getStatus(f.play_rate, 20.0, true)) +
+    metricCard('Avg Watched', f.avg_percent_watched, fmtPct(f.avg_percent_watched), 'Target: 40%+', getStatus(f.avg_percent_watched, 40.0, true)) +
     metricCard('Form Submissions', f.form_submissions, fmtNum(f.form_submissions), '', 'neutral') +
     metricCard('Page Conv. Rate', f.page_conversion_rate, fmtPct(f.page_conversion_rate), 'Target: 3-5%+', getStatus(f.page_conversion_rate, 3.0, true)) +
     metricCard('Calls Booked', f.calls_booked, fmtNum(f.calls_booked), '', 'neutral') +
-    metricCard('Booking Rate', f.booking_rate, fmtPct(f.booking_rate), 'Target: 30%+', getStatus(f.booking_rate, 30.0, true));
+    metricCard('Booking Rate', f.booking_rate, fmtPct(f.booking_rate), 'Target: 30%+', getStatus(f.booking_rate, 30.0, true)) +
+    (f.vsl_name ? '<div style="grid-column:1/-1;padding:8px 12px;font-size:13px;color:#888;">VSL: ' + f.vsl_name + (f.vsl_version ? ' v' + f.vsl_version : '') + (f.vsl_duration ? ' | Duration: ' + Math.round(f.vsl_duration/60) + 'min' : '') + '</div>' : '');
 }
 
 // RENDER SALES SECTION
@@ -718,7 +736,25 @@ function renderSales(data, elementId) {
     metricCard('Calls Closed', s.calls_closed, fmtNum(s.calls_closed), '', 'neutral') +
     metricCard('Close Rate', s.close_rate, fmtPct(s.close_rate), 'Target: 25-30%+', getStatus(s.close_rate, 25.0, true)) +
     metricCard('AOV', s.aov, fmtMoney(s.aov), '', 'neutral') +
-    metricCard('Revenue Collected', s.revenue_collected, fmtMoney(s.revenue_collected), '', 'neutral');
+    metricCard('Cash Collected', s.revenue_collected, fmtMoney(s.revenue_collected), 'Full pay + payment plans', 'neutral') +
+    metricCard('Cash Full Pay', s.cash_full_pay, fmtMoney(s.cash_full_pay), '', 'neutral') +
+    metricCard('Cash Payment Plans', s.cash_payment_plans, fmtMoney(s.cash_payment_plans), '', 'neutral');
+}
+
+// RENDER SOURCE BREAKDOWN
+function renderSourceBreakdown(data, elementId) {
+  const el = document.getElementById(elementId);
+  if (!el || !data) return;
+  const s = data;
+  const adRev = s.ad_revenue || 0;
+  const orgRev = s.organic_revenue || 0;
+  const total = adRev + orgRev;
+  const adPct = total > 0 ? (adRev / total * 100) : 0;
+  const orgPct = total > 0 ? (orgRev / total * 100) : 0;
+  el.innerHTML = 
+    metricCard('Ad-Sourced Cash', adRev, fmtMoney(adRev), adPct.toFixed(0) + '% of total', 'neutral') +
+    metricCard('Organic Cash', orgRev, fmtMoney(orgRev), orgPct.toFixed(0) + '% of total', 'neutral') +
+    metricCard('Total Cash Collected', total, fmtMoney(total), '', 'neutral');
 }
 
 // RENDER KEYSTONE
@@ -872,18 +908,21 @@ function renderAll() {
   renderAds(dashboardData.daily.ads, 'dailyAds');
   renderFunnel(dashboardData.daily.funnel, 'dailyFunnel');
   renderSales(dashboardData.daily.sales, 'dailySales');
+  renderSourceBreakdown(dashboardData.daily.source, 'dailySource');
   
   // Weekly
   renderAds(dashboardData.weekly.ads, 'weeklyAds');
   renderFunnel(dashboardData.weekly.funnel, 'weeklyFunnel');
   renderSales(dashboardData.weekly.sales, 'weeklySales');
   renderKeystone(dashboardData.weekly.keystone, 'weeklyKeystone');
+  renderSourceBreakdown(dashboardData.weekly.source, 'weeklySource');
   
   // Monthly
   renderAds(dashboardData.monthly.ads, 'monthlyAds');
   renderFunnel(dashboardData.monthly.funnel, 'monthlyFunnel');
   renderSales(dashboardData.monthly.sales, 'monthlySales');
   renderKeystone(dashboardData.monthly.keystone, 'monthlyKeystone');
+  renderSourceBreakdown(dashboardData.monthly.source, 'monthlySource');
   renderClosers();
   renderSetters();
   

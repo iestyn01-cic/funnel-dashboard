@@ -1,16 +1,16 @@
 {
-  "last_updated": "2026-09-04T11:47:16.605656+00:00",
+  "last_updated": "2026-09-04T13:25:00+00:00",
   "daily": {
     "date": "2026-09-04",
     "ads": {
-      "spend": 0,
-      "impressions": 0,
-      "cpm": 0,
-      "link_clicks": 0,
-      "link_ctr": 0,
-      "cpc": 0,
-      "cost_per_lead": 0,
-      "leads": 0
+      "spend": 317.63,
+      "impressions": 4466,
+      "cpm": 71.12,
+      "link_clicks": 107.71,
+      "link_ctr": 2.41,
+      "cpc": 2.95,
+      "cost_per_lead": 74.11,
+      "leads": 4.28
     },
     "funnel": {
       "page_views": 0,
@@ -26,7 +26,19 @@
       "calls_closed": 0,
       "close_rate": 0,
       "aov": 0,
-      "revenue_collected": 0
+      "revenue_collected": 0,
+      "cash_full_pay": 0,
+      "cash_payment_plans": 0
+    },
+    "source": {
+      "ad_revenue": 0,
+      "organic_revenue": 0,
+      "referral_revenue": 0,
+      "other_revenue": 0,
+      "ad_calls_showed": 0,
+      "organic_calls_showed": 0,
+      "ad_calls_closed": 0,
+      "organic_calls_closed": 0
     },
     "keystone": {
       "roas": 0,
@@ -40,14 +52,14 @@
   "weekly": {
     "week_of": "2026-09-01",
     "ads": {
-      "spend": 0,
-      "impressions": 0,
-      "cpm": 0,
-      "link_clicks": 0,
-      "link_ctr": 0,
-      "cpc": 0,
-      "cost_per_lead": 0,
-      "leads": 0
+      "spend": 2223.36,
+      "impressions": 31258,
+      "cpm": 71.12,
+      "link_clicks": 754,
+      "link_ctr": 2.41,
+      "cpc": 2.95,
+      "cost_per_lead": 74.11,
+      "leads": 30
     },
     "funnel": {
       "page_views": 0,
@@ -63,7 +75,19 @@
       "calls_closed": 0,
       "close_rate": 0,
       "aov": 0,
-      "revenue_collected": 0
+      "revenue_collected": 0,
+      "cash_full_pay": 0,
+      "cash_payment_plans": 0
+    },
+    "source": {
+      "ad_revenue": 0,
+      "organic_revenue": 0,
+      "referral_revenue": 0,
+      "other_revenue": 0,
+      "ad_calls_showed": 0,
+      "organic_calls_showed": 0,
+      "ad_calls_closed": 0,
+      "organic_calls_closed": 0
     },
     "keystone": {
       "roas": 0,
@@ -77,14 +101,14 @@
   "monthly": {
     "month": "2026-09",
     "ads": {
-      "spend": 0,
-      "impressions": 0,
-      "cpm": 0,
-      "link_clicks": 0,
-      "link_ctr": 0,
-      "cpc": 0,
-      "cost_per_lead": 0,
-      "leads": 0
+      "spend": 2223.36,
+      "impressions": 31258,
+      "cpm": 71.12,
+      "link_clicks": 754,
+      "link_ctr": 2.41,
+      "cpc": 2.95,
+      "cost_per_lead": 74.11,
+      "leads": 30
     },
     "funnel": {
       "page_views": 0,
@@ -100,7 +124,19 @@
       "calls_closed": 0,
       "close_rate": 0,
       "aov": 0,
-      "revenue_collected": 0
+      "revenue_collected": 0,
+      "cash_full_pay": 0,
+      "cash_payment_plans": 0
+    },
+    "source": {
+      "ad_revenue": 0,
+      "organic_revenue": 0,
+      "referral_revenue": 0,
+      "other_revenue": 0,
+      "ad_calls_showed": 0,
+      "organic_calls_showed": 0,
+      "ad_calls_closed": 0,
+      "organic_calls_closed": 0
     },
     "keystone": {
       "roas": 0,
@@ -113,6 +149,7 @@
     "closers": [],
     "setters": []
   },
+  "eod_entries": [],
   "benchmarks": {
     "link_ctr": 2.0,
     "page_conversion_rate": 3.0,
