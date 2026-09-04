@@ -1,8 +1,11 @@
 """
 Funnel Tracking Dashboard - Webhook Receiver & Server
 =====================================================
-Receives POST requests from Zapier, updates dashboard_data.json,
+Receives POST requests from Zapier, stores data in PostgreSQL,
 and serves the dashboard.
+
+PERSISTENT STORAGE: Uses PostgreSQL (DATABASE_URL env var).
+Data survives Render redeployments.
 
 ZAPIER WEBHOOK URL:  http://<your-server>/webhook
 
@@ -19,8 +22,7 @@ For closers/setters, include a "name" field in data to identify the person.
 Optional: add "auth_token" to the payload if you set AUTH_TOKEN below.
 
 RUN:
-  python3 webhook_server.py
-  (or background: tmux new-session -d -s dashboard 'python3 /workspace/webhook_server.py')
+  python3 app.py
 """
 
 import json
@@ -34,19 +36,101 @@ from flask import Flask, request, jsonify, send_from_directory
 WORKSPACE = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(WORKSPACE, "dashboard_data.json")
 PORT = int(os.environ.get("PORT", 5000))
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 # Set an auth token to prevent random POSTs. Leave empty to disable.
-# If set, Zapier must include "auth_token": "your_token" in every payload.
 AUTH_TOKEN = ""
 
 # ============================================================
-# FLASK APP
+# DATABASE SETUP
 # ============================================================
-app = Flask(__name__, static_folder=WORKSPACE)
+_db_conn = None
+
+def get_db():
+    """Get a database connection (creates one if needed)."""
+    global _db_conn
+    if not DATABASE_URL:
+        return None
+    if _db_conn is None or _db_conn.closed:
+        import psycopg2
+        # Supabase and most cloud DBs require SSL
+        conn_kwargs = {"sslmode": "require"}
+        _db_conn = psycopg2.connect(DATABASE_URL, **conn_kwargs)
+        _db_conn.autocommit = True
+    return _db_conn
 
 
-def load_data():
-    """Load the current dashboard data from JSON file."""
+def init_db():
+    """Create the dashboard_data table if it doesn't exist."""
+    if not DATABASE_URL:
+        return
+    conn = get_db()
+    if not conn:
+        return
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS dashboard_data (
+            id SERIAL PRIMARY KEY,
+            data JSONB NOT NULL,
+            updated_at TIMESTAMP DEFAULT NOW()
+        );
+    """)
+    # Check if we have any data, if not seed from the JSON file
+    cur.execute("SELECT COUNT(*) FROM dashboard_data;")
+    count = cur.fetchone()[0]
+    if count == 0:
+        # Seed from local JSON file if it exists
+        seed = load_data_file()
+        cur.execute(
+            "INSERT INTO dashboard_data (data) VALUES (%s);",
+            (json.dumps(seed),)
+        )
+    cur.close()
+
+
+def load_data_db():
+    """Load dashboard data from PostgreSQL."""
+    conn = get_db()
+    if not conn:
+        return load_data_file()
+    cur = conn.cursor()
+    cur.execute("SELECT data FROM dashboard_data ORDER BY id DESC LIMIT 1;")
+    row = cur.fetchone()
+    cur.close()
+    if row:
+        return row[0] if isinstance(row[0], dict) else json.loads(row[0])
+    return {}
+
+
+def save_data_db(data):
+    """Save dashboard data to PostgreSQL."""
+    data["last_updated"] = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    if not conn:
+        save_data_file(data)
+        return
+    cur = conn.cursor()
+    # Upsert: update the single row if it exists, otherwise insert
+    cur.execute("SELECT COUNT(*) FROM dashboard_data;")
+    count = cur.fetchone()[0]
+    if count > 0:
+        cur.execute(
+            "UPDATE dashboard_data SET data = %s, updated_at = NOW() WHERE id = (SELECT id FROM dashboard_data ORDER BY id DESC LIMIT 1);",
+            (json.dumps(data),)
+        )
+    else:
+        cur.execute(
+            "INSERT INTO dashboard_data (data) VALUES (%s);",
+            (json.dumps(data),)
+        )
+    cur.close()
+
+
+# ============================================================
+# FILE FALLBACK (for local dev / no database)
+# ============================================================
+def load_data_file():
+    """Load the current dashboard data from JSON file (fallback)."""
     try:
         with open(DATA_FILE, "r") as f:
             return json.load(f)
@@ -54,11 +138,42 @@ def load_data():
         return {}
 
 
-def save_data(data):
-    """Save dashboard data to JSON file."""
+def save_data_file(data):
+    """Save dashboard data to JSON file (fallback)."""
     data["last_updated"] = datetime.now(timezone.utc).isoformat()
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=2)
+
+
+# ============================================================
+# UNIFIED LOAD/SAVE (auto-detects DB vs file)
+# ============================================================
+def load_data():
+    """Load data from DB if available, otherwise from file."""
+    if DATABASE_URL:
+        try:
+            return load_data_db()
+        except Exception as e:
+            print(f"  [DB ERROR] load_data failed, falling back to file: {e}")
+            return load_data_file()
+    return load_data_file()
+
+
+def save_data(data):
+    """Save data to DB if available, otherwise to file."""
+    if DATABASE_URL:
+        try:
+            save_data_db(data)
+            return
+        except Exception as e:
+            print(f"  [DB ERROR] save_data failed, falling back to file: {e}")
+    save_data_file(data)
+
+
+# ============================================================
+# FLASK APP
+# ============================================================
+app = Flask(__name__, static_folder=WORKSPACE)
 
 
 def deep_merge(base, update):
@@ -88,7 +203,7 @@ def dashboard():
 
 @app.route("/dashboard_data.json")
 def data_endpoint():
-    return send_from_directory(WORKSPACE, "dashboard_data.json")
+    return jsonify(load_data())
 
 
 # ============================================================
@@ -165,7 +280,7 @@ def receive_webhook():
         return jsonify({
             "status": "success",
             "message": f"Updated {timeframe}.{category}",
-            "last_updated": dashboard_data["last_updated"]
+            "last_updated": dashboard_data.get("last_updated", "")
         }), 200
 
     except Exception as e:
@@ -230,10 +345,22 @@ def clear_eod():
 def status():
     """Health check endpoint."""
     data = load_data()
+    db_test = "not_configured"
+    if DATABASE_URL:
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("SELECT 1;")
+            cur.close()
+            db_test = "connected"
+        except Exception as e:
+            db_test = f"error: {str(e)}"
     return jsonify({
         "status": "online",
         "last_updated": data.get("last_updated", "never"),
-        "data_file": DATA_FILE
+        "storage": "postgresql" if DATABASE_URL else "file",
+        "database_connected": bool(DATABASE_URL),
+        "db_test": db_test
     }), 200
 
 
@@ -703,7 +830,9 @@ def reset_timeframe(dashboard_data, timeframe):
         },
         "funnel": {
             "page_views": 0, "form_submissions": 0, "page_conversion_rate": 0,
-            "calls_booked": 0, "booking_rate": 0
+            "calls_booked": 0, "booking_rate": 0,
+            "page_loads": 0, "visitors": 0, "plays": 0, "play_rate": 0,
+            "avg_percent_watched": 0, "vsl_name": "", "vsl_version": "", "vsl_duration": 0
         },
         "sales": {
             "calls_booked": 0, "calls_showed": 0, "show_rate": 0,
@@ -729,13 +858,20 @@ def reset_timeframe(dashboard_data, timeframe):
 # MAIN
 # ============================================================
 if __name__ == "__main__":
+    # Initialize database on startup
+    if DATABASE_URL:
+        print("  Database: PostgreSQL (persistent)")
+        init_db()
+    else:
+        print("  Database: File-based (NOT persistent - set DATABASE_URL for persistence)")
+
     print(f"")
     print(f"  Funnel Tracking Dashboard Server")
     print(f"  =================================")
     print(f"  Dashboard URL:  http://localhost:{PORT}/")
     print(f"  Webhook URL:    http://localhost:{PORT}/webhook")
     print(f"  Status URL:     http://localhost:{PORT}/webhook/status")
-    print(f"  Data file:      {DATA_FILE}")
+    print(f"  EOD Form URL:   http://localhost:{PORT}/eod")
     print(f"  Auth token:     {'enabled' if AUTH_TOKEN else 'disabled'}")
     print(f"")
     print(f"  Press Ctrl+C to stop")

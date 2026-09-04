@@ -9,10 +9,10 @@ Your dashboard is live and the webhook receiver is running. This guide walks you
 
 | Endpoint | URL |
 |----------|-----|
-| Dashboard | https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/ |
-| Webhook (POST data here) | https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/webhook |
-| Status Check | https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/webhook/status |
-| Reset Data | https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/webhook/reset |
+| Dashboard | https://funnel-dashboard-r0f0.onrender.com/ |
+| Webhook (POST data here) | https://funnel-dashboard-r0f0.onrender.com/webhook |
+| Status Check | https://funnel-dashboard-r0f0.onrender.com/webhook/status |
+| Reset Data | https://funnel-dashboard-r0f0.onrender.com/webhook/reset |
 
 ---
 
@@ -51,7 +51,7 @@ The server merges this data into your dashboard JSON file and auto-calculates al
 - Fields to pull: spend, impressions, link_clicks, leads (or form submissions)
 
 **Action 2:** Webhooks by Zapier - POST
-- URL: https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/webhook
+- URL: https://funnel-dashboard-r0f0.onrender.com/webhook
 - Payload Type: JSON
 - Data:
   - timeframe: daily
@@ -87,7 +87,7 @@ The server auto-calculates: CPM, Link CTR, CPC, Cost Per Lead.
 **Trigger:** GoHighLevel - New Appointment Booked (or New Opportunity Created)
 
 **Action:** Webhooks by Zapier - POST
-- URL: https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/webhook
+- URL: https://funnel-dashboard-r0f0.onrender.com/webhook
 - Payload Type: JSON
 - Data:
   - timeframe: daily
@@ -111,7 +111,7 @@ For per-event zaps (fires on each booking), use this approach instead:
 **Trigger:** GoHighLevel - Appointment Status Changed (or Opportunity Stage Changed)
 
 **Action:** Webhooks by Zapier - POST
-- URL: https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/webhook
+- URL: https://funnel-dashboard-r0f0.onrender.com/webhook
 - Payload Type: JSON
 
 **For showed calls:**
@@ -148,7 +148,7 @@ The server auto-calculates: Show Rate, Close Rate, AOV.
 **Trigger:** Stripe - New Charge (or your payment processor's trigger)
 
 **Action:** Webhooks by Zapier - POST
-- URL: https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/webhook
+- URL: https://funnel-dashboard-r0f0.onrender.com/webhook
 - Payload Type: JSON
 - Data:
   - timeframe: daily
@@ -165,7 +165,7 @@ The server auto-calculates: Show Rate, Close Rate, AOV.
 **Trigger:** Schedule by Zapier (daily at 6 PM) or GHL trigger
 
 **Action:** Webhooks by Zapier - POST
-- URL: https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/webhook
+- URL: https://funnel-dashboard-r0f0.onrender.com/webhook
 - Payload Type: JSON
 - Data:
   - timeframe: monthly
@@ -188,7 +188,7 @@ The server auto-calulates each closer's show rate and close rate.
 **Trigger:** Schedule by Zapier (daily at 6 PM) or GHL trigger
 
 **Action:** Webhooks by Zapier - POST
-- URL: https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/webhook
+- URL: https://funnel-dashboard-r0f0.onrender.com/webhook
 - Payload Type: JSON
 - Data:
   - timeframe: monthly
@@ -211,7 +211,7 @@ The server auto-calculates each setter's booking rate.
 - Weekly reset: Run at 12:01 AM every Monday
 
 **Action:** Webhooks by Zapier - POST
-- URL: https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/webhook/reset
+- URL: https://funnel-dashboard-r0f0.onrender.com/webhook/reset
 - Payload Type: JSON
 - Data:
   - timeframe: daily (for daily reset) or weekly (for weekly reset)
@@ -225,7 +225,7 @@ The server auto-calculates each setter's booking rate.
 **Trigger:** Schedule by Zapier (daily at 6 PM)
 
 **Action 1:** Webhooks by Zapier - GET
-- URL: https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/dashboard_data.json
+- URL: https://funnel-dashboard-r0f0.onrender.com/dashboard_data.json
 - This pulls the current dashboard data
 
 **Action 2:** Slack - Send Message
@@ -240,7 +240,7 @@ After setting up each zap, test it by sending a manual POST:
 
 **Using curl (terminal):**
 ```bash
-curl -X POST https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/webhook \
+curl -X POST https://funnel-dashboard-r0f0.onrender.com/webhook \
   -H "Content-Type: application/json" \
   -d '{
     "timeframe": "daily",
@@ -258,7 +258,7 @@ curl -X POST https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/we
 Every Webhooks by Zapier action has a "Test" button. Click it after configuring your payload to send a test request. You should see a success response.
 
 **Verify on the dashboard:**
-Open https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/ and check the Daily tab. Your test data should appear within 60 seconds.
+Open https://funnel-dashboard-r0f0.onrender.com/ and check the Daily tab. Your test data should appear within 60 seconds.
 
 ---
 
@@ -290,7 +290,7 @@ You only need to send these raw numbers. The server computes everything else:
 
 **Dashboard shows zeros:** The server is running but no data has been sent yet. Test with the curl command above.
 
-**Dashboard not loading:** Check the server status at https://5000-f7116517-9d5c-4805-94ef-fe3a20cd.daytonaproxy01.net/webhook/status
+**Dashboard not loading:** Check the server status at https://funnel-dashboard-r0f0.onrender.com/webhook/status
 
 **Data not updating:** The dashboard auto-refreshes every 60 seconds. Hard refresh your browser if needed.
 
