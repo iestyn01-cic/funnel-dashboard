@@ -52,10 +52,10 @@ def get_db():
     if not DATABASE_URL:
         return None
     if _db_conn is None or _db_conn.closed:
-        import psycopg2
+        import psycopg
         # Supabase and most cloud DBs require SSL
         conn_kwargs = {"sslmode": "require"}
-        _db_conn = psycopg2.connect(DATABASE_URL, **conn_kwargs)
+        _db_conn = psycopg.connect(DATABASE_URL, **conn_kwargs)
         _db_conn.autocommit = True
     return _db_conn
 
@@ -203,7 +203,9 @@ def dashboard():
 
 @app.route("/dashboard_data.json")
 def data_endpoint():
-    return jsonify(load_data())
+    data = load_data()
+    set_date_labels(data)
+    return jsonify(data)
 
 
 # ============================================================
@@ -273,6 +275,7 @@ def receive_webhook():
         # Recalculate keystone metrics if we have the inputs
         recalculate_keystones(dashboard_data)
         recalculate_derived_metrics(dashboard_data)
+        set_date_labels(dashboard_data)
 
         # Save
         save_data(dashboard_data)
@@ -561,6 +564,7 @@ def eod_submit():
         recalculate_eod_aggregates(dashboard_data)
         recalculate_derived_metrics(dashboard_data)
         recalculate_keystones(dashboard_data)
+        set_date_labels(dashboard_data)
 
         save_data(dashboard_data)
 
@@ -723,6 +727,35 @@ def safe_div(numerator, denominator):
     except (TypeError, ZeroDivisionError):
         pass
     return 0
+
+
+def set_date_labels(dashboard_data):
+    """Set date_label for each timeframe so the dashboard shows which dates the data covers."""
+    from datetime import datetime as dt, timedelta
+    import calendar
+
+    today = dt.now(timezone.utc).date()
+
+    # Daily: just today's date
+    daily_label = today.strftime("%B %d, %Y").replace(" 0", " ")
+
+    # Weekly: last 7 days (7 days ago through today)
+    week_start = today - timedelta(days=6)
+    weekly_label = f"{week_start.strftime('%B %d').replace(' 0', ' ')} - {today.strftime('%B %d, %Y').replace(' 0', ' ')}"
+
+    # Monthly: first day to last day of current month
+    _, last_day = calendar.monthrange(today.year, today.month)
+    month_end = today.replace(day=last_day)
+    monthly_label = f"{today.strftime('%B %d').replace(' 0', ' ')} - {month_end.strftime('%B %d, %Y').replace(' 0', ' ')}"
+
+    for tf, label in [("daily", daily_label), ("weekly", weekly_label), ("monthly", monthly_label)]:
+        if tf not in dashboard_data:
+            dashboard_data[tf] = {}
+        # Set date_label on ads, funnel, and sales so the dashboard can pick it up from any
+        for cat in ("ads", "funnel", "sales"):
+            if cat not in dashboard_data[tf]:
+                dashboard_data[tf][cat] = {}
+            dashboard_data[tf][cat]["date_label"] = label
 
 
 def recalculate_keystones(dashboard_data):
