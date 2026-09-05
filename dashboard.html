@@ -57,6 +57,20 @@
     color: #666;
   }
 
+  /* DATE LABEL */
+  .date-label {
+    display: inline-block;
+    padding: 8px 20px;
+    background: #1A1A1A;
+    border: 1px solid #333;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #10B981;
+    margin-bottom: 20px;
+    letter-spacing: 0.3px;
+  }
+
   /* TABS */
   .tabs {
     display: flex;
@@ -381,6 +395,7 @@
 
   <!-- DAILY -->
   <div class="content active" id="daily">
+    <div class="date-label" id="dailyDateLabel">Loading...</div>
     <div class="section">
       <div class="section-title">Ads Data (Meta / Facebook)</div>
       <div class="metrics-grid" id="dailyAds"></div>
@@ -401,6 +416,7 @@
 
   <!-- WEEKLY -->
   <div class="content" id="weekly">
+    <div class="date-label" id="weeklyDateLabel">Loading...</div>
     <div class="section">
       <div class="section-title">Ads Data (Meta / Facebook)</div>
       <div class="metrics-grid" id="weeklyAds"></div>
@@ -425,6 +441,7 @@
 
   <!-- MONTHLY -->
   <div class="content" id="monthly">
+    <div class="date-label" id="monthlyDateLabel">Loading...</div>
     <div class="section">
       <div class="section-title">Ads Data (Meta / Facebook)</div>
       <div class="metrics-grid" id="monthlyAds"></div>
@@ -903,6 +920,18 @@ function renderAll() {
   
   // Last updated
   document.getElementById('lastUpdated').textContent = 'Updated ' + new Date(dashboardData.last_updated).toLocaleString();
+  
+  // Date labels
+  const dailyLabel = dashboardData.daily?.ads?.date_label || dashboardData.daily?.funnel?.date_label || dashboardData.daily?.sales?.date_label || 'No date set';
+  const weeklyLabel = dashboardData.weekly?.ads?.date_label || dashboardData.weekly?.funnel?.date_label || dashboardData.weekly?.sales?.date_label || 'No date set';
+  const monthlyLabel = dashboardData.monthly?.ads?.date_label || dashboardData.monthly?.funnel?.date_label || dashboardData.monthly?.sales?.date_label || 'No date set';
+  
+  const dlEl = document.getElementById('dailyDateLabel');
+  const wlEl = document.getElementById('weeklyDateLabel');
+  const mlEl = document.getElementById('monthlyDateLabel');
+  if (dlEl) dlEl.textContent = dailyLabel;
+  if (wlEl) wlEl.textContent = weeklyLabel;
+  if (mlEl) mlEl.textContent = monthlyLabel;
   
   // Daily
   renderAds(dashboardData.daily.ads, 'dailyAds');
