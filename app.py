@@ -744,9 +744,10 @@ def set_date_labels(dashboard_data):
     weekly_label = f"{week_start.strftime('%B %d').replace(' 0', ' ')} - {today.strftime('%B %d, %Y').replace(' 0', ' ')}"
 
     # Monthly: first day to last day of current month
+    month_start = today.replace(day=1)
     _, last_day = calendar.monthrange(today.year, today.month)
     month_end = today.replace(day=last_day)
-    monthly_label = f"{today.strftime('%B %d').replace(' 0', ' ')} - {month_end.strftime('%B %d, %Y').replace(' 0', ' ')}"
+    monthly_label = f"{month_start.strftime('%B %d').replace(' 0', ' ')} - {month_end.strftime('%B %d, %Y').replace(' 0', ' ')}"
 
     for tf, label in [("daily", daily_label), ("weekly", weekly_label), ("monthly", monthly_label)]:
         if tf not in dashboard_data:
