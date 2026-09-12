@@ -7,3 +7,24 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: WISTIA_API_KEY
+        sync: false
+      - key: WISTIA_MEDIA_ID
+        value: fsx8yduvoy
+      - key: CRON_SECRET
+        value: funnel-dash-cron-2026
+      - key: DATABASE_URL
+        sync: false
+      - key: FLASK_SECRET_KEY
+        sync: false
+
+  # Render Cron Job: pulls Wistia stats HOURLY to keep data fresh
+  # Meta Ads data is handled by the agent scheduled trigger (has Meta API credentials)
+  - type: cron
+    name: funnel-dashboard-wistia-hourly
+    runtime: python
+    schedule: "0 * * * *"
+    command: "curl -s -X POST -H 'X-Cron-Secret: funnel-dash-cron-2026' https://funnel-dashboard-r0f0.onrender.com/cron/update-wistia"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
