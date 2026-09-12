@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Call Analysis - Funnel Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #0A0A0A; color: #FFF; }
+  .header { display: flex; justify-content: space-between; align-items: center; padding: 20px 32px; border-bottom: 1px solid #1A1A1A; }
+  .header h1 { font-size: 20px; font-weight: 700; }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  .header-right a { color: #3b82f6; text-decoration: none; font-size: 14px; }
+  .header-right a:hover { text-decoration: underline; }
+  .user-badge { font-size: 13px; color: #999; padding: 6px 12px; background: #1A1A1A; border-radius: 8px; }
+  .container { max-width: 900px; margin: 0 auto; padding: 32px; }
+  .form-section { background: #1A1A1A; border-radius: 12px; padding: 28px; margin-bottom: 24px; }
+  .form-section h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+  .form-section p { font-size: 13px; color: #777; margin-bottom: 20px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 13px; color: #999; margin-bottom: 6px; font-weight: 500; }
+  .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 12px 14px; background: #0A0A0A; border: 1px solid #333; border-radius: 8px; color: #FFF; font-size: 14px; font-family: inherit; }
+  .form-group input:focus, .form-group textarea:focus { outline: none; border-color: #3b82f6; }
+  .form-group textarea { resize: vertical; min-height: 100px; }
+  .full { grid-column: 1 / -1; }
+  .btn { padding: 12px 28px; background: #FFF; color: #000; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .btn:hover { opacity: 0.9; }
+  .entries-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  .entries-table th { text-align: left; padding: 10px 12px; font-size: 12px; color: #777; border-bottom: 1px solid #333; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .entries-table td { padding: 10px 12px; font-size: 14px; border-bottom: 1px solid #1A1A1A; }
+  .entries-table tr:hover { background: #111; }
+  .empty { text-align: center; padding: 40px; color: #555; font-size: 14px; }
+  .success-msg { color: #86efac; font-size: 14px; margin-top: 12px; display: none; }
+  .success-msg.show { display: block; }
+  .info-box { background: #0A0A0A; border: 1px solid #333; border-radius: 8px; padding: 16px; margin-bottom: 20px; font-size: 13px; color: #999; line-height: 1.6; }
+  .info-box strong { color: #FFF; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Call Analysis</h1>
+  <div class="header-right">
+    <a href="/">Dashboard</a>
+    <a href="/eod">EOD Form</a>
+    <span class="user-badge" id="userBadge">Loading...</span>
+    <a href="#" onclick="logout()">Logout</a>
+  </div>
+</div>
+<div class="container">
+  <div class="form-section">
+    <h2>Upload Call Recording</h2>
+    <p>Paste your Fathom call link below. Fathom recordings auto-generate transcripts, which will be analyzed for patterns and common objections.</p>
+    <div class="info-box">
+      <strong>How it works:</strong> Paste the Fathom share link for any sales call. The transcript is automatically available via Fathom's API. Each uploaded call gets analyzed for objection patterns, closing techniques, and conversion insights that feed back into the dashboard for coaching.
+    </div>
+    <form id="callForm" onsubmit="return submitCallLink(event)">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Date</label>
+          <input type="date" id="call_date" required>
+        </div>
+        <div class="form-group">
+          <label>Closer Name</label>
+          <input type="text" id="call_closer" readonly>
+        </div>
+        <div class="form-group">
+          <label>Prospect Name (optional)</label>
+          <input type="text" id="call_prospect" placeholder="John Smith">
+        </div>
+        <div class="form-group">
+          <label>Call Outcome</label>
+          <select id="call_outcome">
+            <option value="">Select outcome...</option>
+            <option value="closed">Closed</option>
+            <option value="follow_up">Follow-up scheduled</option>
+            <option value="no_close">Did not close</option>
+            <option value="no_show">No show</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label>Fathom Call Link</label>
+          <input type="url" id="call_link" required placeholder="https://fathom.app/share/...">
+        </div>
+        <div class="form-group full">
+          <label>Notes / Key Objections (optional)</label>
+          <textarea id="call_notes" placeholder="What were the main objections? What patterns did you notice?"></textarea>
+        </div>
+      </div>
+      <button type="submit" class="btn">Upload Call</button>
+      <div class="success-msg" id="call_success">Call link uploaded successfully</div>
+    </form>
+  </div>
+  <div class="form-section">
+    <h2>Uploaded Calls</h2>
+    <div id="callList"></div>
+  </div>
+</div>
+<script>
+let currentUser = null;
+async function init() {
+  const resp = await fetch('/api/auth/me');
+  const data = await resp.json();
+  if (!data.authenticated) { window.location.href = '/login'; return; }
+  currentUser = data.user;
+  document.getElementById('userBadge').textContent = currentUser.name + ' (' + currentUser.role + ')';
+  document.getElementById('call_closer').value = currentUser.name;
+  document.getElementById('call_date').value = new Date().toISOString().split('T')[0];
+  loadCalls();
+}
+async function submitCallLink(e) {
+  e.preventDefault();
+  const body = {
+    date: document.getElementById('call_date').value,
+    closer_name: currentUser.name,
+    call_link: document.getElementById('call_link').value,
+    prospect_name: document.getElementById('call_prospect').value,
+    outcome: document.getElementById('call_outcome').value,
+    transcript: document.getElementById('call_notes').value,
+  };
+  const resp = await fetch('/api/call-links/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (resp.ok) {
+    document.getElementById('call_success').classList.add('show');
+    document.getElementById('callForm').reset();
+    document.getElementById('call_closer').value = currentUser.name;
+    document.getElementById('call_date').value = new Date().toISOString().split('T')[0];
+    loadCalls();
+    setTimeout(() => document.getElementById('call_success').classList.remove('show'), 3000);
+  }
+  return false;
+}
+async function loadCalls() {
+  const resp = await fetch('/api/call-links');
+  const calls = await resp.json();
+  const el = document.getElementById('callList');
+  if (!calls || calls.length === 0) {
+    el.innerHTML = '<div class="empty">No calls uploaded yet. Upload your first call above.</div>';
+    return;
+  }
+  el.innerHTML = '<table class="entries-table"><thead><tr><th>Date</th><th>Closer</th><th>Prospect</th><th>Outcome</th><th>Link</th></tr></thead><tbody>' +
+    calls.map(c => `<tr><td>${c.date}</td><td>${c.closer_name}</td><td>${c.prospect_name || '-'}</td><td>${c.outcome || '-'}</td><td><a href="${c.call_link}" target="_blank" style="color:#3b82f6;font-size:12px">Open</a></td></tr>`).join('') +
+    '</tbody></table>';
+}
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  window.location.href = '/login';
+}
+init();
+</script>
+</body>
+</html>
