@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login - Funnel Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #0A0A0A; color: #FFF; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+  .login-box { background: #1A1A1A; border-radius: 16px; padding: 48px 40px; width: 400px; max-width: 90vw; }
+  .login-box h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+  .login-box p { font-size: 14px; color: #777; margin-bottom: 32px; }
+  .form-group { margin-bottom: 20px; }
+  .form-group label { display: block; font-size: 13px; color: #999; margin-bottom: 8px; font-weight: 500; }
+  .form-group input { width: 100%; padding: 14px 16px; background: #0A0A0A; border: 1px solid #333; border-radius: 10px; color: #FFF; font-size: 15px; font-family: inherit; transition: border-color 0.2s; }
+  .form-group input:focus { outline: none; border-color: #3b82f6; }
+  .btn { width: 100%; padding: 14px; background: #FFF; color: #000; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; font-family: inherit; }
+  .btn:hover { opacity: 0.9; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .error { color: #ef4444; font-size: 13px; margin-top: 16px; text-align: center; display: none; }
+  .error.show { display: block; }
+  .hint { margin-top: 24px; font-size: 12px; color: #555; text-align: center; }
+</style>
+</head>
+<body>
+<div class="login-box">
+  <h1>Funnel Dashboard</h1>
+  <p>Sign in to access your dashboard</p>
+  <form id="loginForm" onsubmit="return doLogin(event)">
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="email" required placeholder="you@company.com">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="password" required placeholder="Enter password">
+    </div>
+    <button type="submit" class="btn" id="loginBtn">Sign In</button>
+    <div class="error" id="errorMsg"></div>
+  </form>
+  <div class="hint">Default admin: admin@congruenceinclosing.com / admin123</div>
+</div>
+<script>
+async function doLogin(e) {
+  e.preventDefault();
+  const btn = document.getElementById('loginBtn');
+  const errEl = document.getElementById('errorMsg');
+  btn.disabled = true;
+  btn.textContent = 'Signing in...';
+  errEl.classList.remove('show');
+  try {
+    const resp = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: document.getElementById('email').value, password: document.getElementById('password').value })
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      window.location.href = '/';
+    } else {
+      errEl.textContent = data.error || 'Login failed';
+      errEl.classList.add('show');
+      btn.disabled = false;
+      btn.textContent = 'Sign In';
+    }
+  } catch (err) {
+    errEl.textContent = 'Connection error';
+    errEl.classList.add('show');
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+  return false;
+}
+</script>
+</body>
+</html>
