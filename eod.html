@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EOD - Funnel Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #0A0A0A; color: #FFF; }
+  .header { display: flex; justify-content: space-between; align-items: center; padding: 20px 32px; border-bottom: 1px solid #1A1A1A; }
+  .header h1 { font-size: 20px; font-weight: 700; }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  .header-right a { color: #3b82f6; text-decoration: none; font-size: 14px; }
+  .header-right a:hover { text-decoration: underline; }
+  .user-badge { font-size: 13px; color: #999; padding: 6px 12px; background: #1A1A1A; border-radius: 8px; }
+  .container { max-width: 900px; margin: 0 auto; padding: 32px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 24px; }
+  .tab { padding: 10px 24px; background: #1A1A1A; border: none; border-radius: 8px 8px 0 0; color: #777; cursor: pointer; font-size: 14px; font-family: inherit; font-weight: 500; }
+  .tab.active { background: #FFF; color: #000; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .form-section { background: #1A1A1A; border-radius: 12px; padding: 28px; margin-bottom: 24px; }
+  .form-section h2 { font-size: 18px; font-weight: 600; margin-bottom: 20px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 13px; color: #999; margin-bottom: 6px; font-weight: 500; }
+  .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 12px 14px; background: #0A0A0A; border: 1px solid #333; border-radius: 8px; color: #FFF; font-size: 14px; font-family: inherit; }
+  .form-group input:focus, .form-group textarea:focus { outline: none; border-color: #3b82f6; }
+  .form-group textarea { resize: vertical; min-height: 80px; }
+  .full { grid-column: 1 / -1; }
+  .btn { padding: 12px 28px; background: #FFF; color: #000; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .btn:hover { opacity: 0.9; }
+  .btn-sm { padding: 6px 14px; font-size: 12px; border-radius: 6px; }
+  .btn-edit { background: #1e3a5f; color: #93c5fd; }
+  .btn-delete { background: #3f1515; color: #fca5a5; }
+  .btn-save { background: #14532d; color: #86efac; }
+  .btn-cancel { background: #333; color: #999; }
+  .entries-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  .entries-table th { text-align: left; padding: 10px 12px; font-size: 12px; color: #777; border-bottom: 1px solid #333; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .entries-table td { padding: 10px 12px; font-size: 14px; border-bottom: 1px solid #1A1A1A; }
+  .entries-table tr:hover { background: #111; }
+  .edit-row input, .edit-row textarea { background: #0A0A0A; border: 1px solid #444; border-radius: 4px; color: #FFF; padding: 6px 8px; font-size: 13px; font-family: inherit; width: 100%; }
+  .success-msg { color: #86efac; font-size: 14px; margin-top: 12px; display: none; }
+  .success-msg.show { display: block; }
+  .empty { text-align: center; padding: 40px; color: #555; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>End of Day Reports</h1>
+  <div class="header-right">
+    <a href="/">Dashboard</a>
+    <a href="/call-analysis">Call Analysis</a>
+    <span class="user-badge" id="userBadge">Loading...</span>
+    <a href="#" onclick="logout()">Logout</a>
+  </div>
+</div>
+<div class="container">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('closer')">Closer EOD</button>
+    <button class="tab" onclick="switchTab('setter')">Setter EOD</button>
+  </div>
+
+  <!-- CLOSER PANEL -->
+  <div class="panel active" id="closerPanel">
+    <div class="form-section">
+      <h2>Submit Closer EOD</h2>
+      <form id="closerForm" onsubmit="return submitCloserEOD(event)">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" id="c_date" required>
+          </div>
+          <div class="form-group">
+            <label>Closer Name</label>
+            <input type="text" id="c_name" readonly>
+          </div>
+          <div class="form-group">
+            <label>Calls Booked</label>
+            <input type="number" id="c_booked" min="0" value="0">
+          </div>
+          <div class="form-group">
+            <label>Calls Showed</label>
+            <input type="number" id="c_showed" min="0" value="0">
+          </div>
+          <div class="form-group">
+            <label>Calls Closed</label>
+            <input type="number" id="c_closed" min="0" value="0">
+          </div>
+          <div class="form-group">
+            <label>No Shows</label>
+            <input type="number" id="c_noshow" min="0" value="0">
+          </div>
+        </div>
+        <div style="margin: 20px 0; padding: 16px; background: #0A0A0A; border-radius: 8px; border: 1px solid #333;">
+          <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 14px; color: #3b82f6;">Call Source Breakdown (Ads vs Organic)</h3>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Ad Calls Booked</label>
+              <input type="number" id="c_ad_booked" min="0" value="0">
+            </div>
+            <div class="form-group">
+              <label>Ad Calls Showed</label>
+              <input type="number" id="c_ad_showed" min="0" value="0">
+            </div>
+            <div class="form-group">
+              <label>Ad Calls Closed</label>
+              <input type="number" id="c_ad_closed" min="0" value="0">
+            </div>
+            <div class="form-group">
+              <label>Organic Calls Booked</label>
+              <input type="number" id="c_org_booked" min="0" value="0">
+            </div>
+            <div class="form-group">
+              <label>Organic Calls Showed</label>
+              <input type="number" id="c_org_showed" min="0" value="0">
+            </div>
+            <div class="form-group">
+              <label>Organic Calls Closed</label>
+              <input type="number" id="c_org_closed" min="0" value="0">
+            </div>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Revenue Collected</label>
+            <input type="number" id="c_revenue" min="0" step="0.01" value="0">
+          </div>
+          <div class="form-group">
+            <label>Cash Full Pay</label>
+            <input type="number" id="c_fullpay" min="0" step="0.01" value="0">
+          </div>
+          <div class="form-group">
+            <label>Cash Payment Plans</label>
+            <input type="number" id="c_payplans" min="0" step="0.01" value="0">
+          </div>
+          <div class="form-group">
+            <label>Ad-Sourced Revenue</label>
+            <input type="number" id="c_adrev" min="0" step="0.01" value="0">
+          </div>
+          <div class="form-group">
+            <label>Organic-Sourced Revenue</label>
+            <input type="number" id="c_orgrev" min="0" step="0.01" value="0">
+          </div>
+          <div class="form-group">
+            <label>Fathom Call Link (optional)</label>
+            <input type="url" id="c_calllink" placeholder="https://fathom.app/share/...">
+          </div>
+          <div class="form-group full">
+            <label>Notes</label>
+            <textarea id="c_notes" placeholder="Objections, patterns, anything notable..."></textarea>
+          </div>
+        </div>
+        <button type="submit" class="btn">Submit EOD</button>
+        <div class="success-msg" id="c_success">EOD submitted successfully</div>
+      </form>
+    </div>
+    <div class="form-section">
+      <h2>Previous EOD Entries</h2>
+      <div id="closerEntries"></div>
+    </div>
+  </div>
+
+  <!-- SETTER PANEL -->
+  <div class="panel" id="setterPanel">
+    <div class="form-section">
+      <h2>Submit Setter EOD</h2>
+      <form id="setterForm" onsubmit="return submitSetterEOD(event)">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" id="s_date" required>
+          </div>
+          <div class="form-group">
+            <label>Setter Name</label>
+            <input type="text" id="s_name" readonly>
+          </div>
+          <div class="form-group">
+            <label>Outreach Sent</label>
+            <input type="number" id="s_outreach" min="0" value="0">
+          </div>
+          <div class="form-group">
+            <label>Replies Received</label>
+            <input type="number" id="s_replies" min="0" value="0">
+          </div>
+          <div class="form-group">
+            <label>Calls Booked</label>
+            <input type="number" id="s_booked" min="0" value="0">
+          </div>
+          <div class="form-group">
+            <label>Calls Showed (of booked)</label>
+            <input type="number" id="s_showed" min="0" value="0">
+          </div>
+          <div class="form-group">
+            <label>Calls Closed</label>
+            <input type="number" id="s_closed" min="0" value="0">
+          </div>
+          <div class="form-group full">
+            <label>Notes</label>
+            <textarea id="s_notes" placeholder="Anything notable about today's outreach..."></textarea>
+          </div>
+        </div>
+        <button type="submit" class="btn">Submit Setter EOD</button>
+        <div class="success-msg" id="s_success">Setter EOD submitted successfully</div>
+      </form>
+    </div>
+    <div class="form-section">
+      <h2>Previous Setter EOD Entries</h2>
+      <div id="setterEntries"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentUser = null;
+let editingId = null;
+
+async function init() {
+  const resp = await fetch('/api/auth/me');
+  const data = await resp.json();
+  if (!data.authenticated) { window.location.href = '/login'; return; }
+  currentUser = data.user;
+  document.getElementById('userBadge').textContent = currentUser.name + ' (' + currentUser.role + ')';
+  document.getElementById('c_name').value = currentUser.name;
+  document.getElementById('s_name').value = currentUser.name;
+  const today = new Date().toISOSTring().split('T')[0];
+  document.getElementById('c_date').value = today;
+  document.getElementById('s_date').value = today;
+  loadCloserEntries();
+  loadSetterEntries();
+  if (currentUser.role === 'closer') {
+    document.querySelector('[onclick="switchTab(\'setter\')"]').style.display = 'none';
+  }
+  if (currentUser.role === 'setter') {
+    document.querySelector('[onclick="switchTab(\'closer\')"]').style.display = 'none';
+    switchTab('setter');
+  }
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById(tab + 'Panel').classList.add('active');
+}
+
+async function submitCloserEOD(e) {
+  e.preventDefault();
+  const body = {
+    date: document.getElementById('c_date').value,
+    closer_name: currentUser.name,
+    calls_booked: parseInt(document.getElementById('c_booked').value) || 0,
+    calls_showed: parseInt(document.getElementById('c_showed').value) || 0,
+    calls_closed: parseInt(document.getElementById('c_closed').value) || 0,
+    calls_no_show: parseInt(document.getElementById('c_noshow').value) || 0,
+    revenue_collected: parseFloat(document.getElementById('c_revenue').value) || 0,
+    cash_full_pay: parseFloat(document.getElementById('c_fullpay').value) || 0,
+    cash_payment_plans: parseFloat(document.getElementById('c_payplans').value) || 0,
+    ad_sourced_revenue: parseFloat(docuument.getElementById('c_adrev').value) || 0,
+    organic_sourced_revenue: parseFloat(document.getElementById('c_orgrev').value) || 0,
+    ad_calls_booked: parseInt(document.getElementById('c_ad_booked').value) || 0,
+    ad_calls_showed: parseInt(document.getElementById('c_ad_showed').value) || 0,
+    ad_calls_closed: parseInt(document.getElementById('c_ad_closed').value) || 0,
+    organic_calls_booked: parseInt(document.getElementById('c_org_booked').value) || 0,
+    organic_calls_showed: parseInt(document.getElementById('c_org_showed').value) || 0,
+    organic_calls_closed: parseInt(document.getElementById('c_org_closed').value) || 0,
+    call_link: document.getElementById('c_calllink').value,
+    notes: document.getElementById('c_notes').value,
+  };
+  const resp = await fetch('/api/eod/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (resp.ok) {
+    document.getElementById('c_success').classList.add('show');
+    document.getElementById('closerForm').reset();
+    document.getElementById('c_name').value = currentUser.name;
+    document.getElementById('c_date').value = new Date().toISOString().split('T')[0];
+    loadCloserEntries();
+    setTimeout(() => document.getElementById('c_success').classList.remove('show'), 3000);
+  }
+  return false;
+}
+
+async function submitSetterEOD(e) {
+  e.preventDefault();
+  const body = {
+    date: document.getElementById('s_date').value,
+    setter_name: currentUser.name,
+    outreach_sent: parseInt(document.getElementById('s_outreach').value) || 0,
+    replies_received: parseInt(document.getElementById('s_replies').value) || 0,
+    calls_booked: parseInt(document.getElementById('s_booked').value) || 0,
+    calls_showed: parseInt(document.getElementById('s_showed').value) || 0,
+    calls_closed: parseInt(document.getElementById('s_closed').value) || 0,
+    notes: document.getElementById('s_notes').value,
+  };
+  const resp = await fetch('/api/eod/setter/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (resp.ok) {
+    document.getElementById('s_success').classList.add('show');
+    document.getElementById('setterForm').reset();
+    document.getElementById('s_name').value = currentUser.name;
+    document.getElementById('s_date').value = new Date().toISOString().split('T')[0];
+    loadSetterEntries();
+    setTimeout(() => document.getElementById('s_success').classList.remove('show'), 3000);
+  }
+  return false;
+}
+
+async function loadCloserEntries() {
+  const resp = await fetch('/api/eod');
+  const entries = await resp.json();
+  const el = document.getElementById('closerEntries');
+  if (!entries || entries.length === 0) {
+    el.innerHTML = '<div class="empty">No EOD entries yet. Submit your first one above.</div>';
+    return;
+  }
+  el.innerHTML = '<table class="entries-table"><thead><tr><th>Date</th><th>Booked</th><th>Showed</th><th>Closed</th><th>Ad (B/S/C)</th><th>Org (B/S/C)</th><th>Revenue</th><th>Call Link</th><th>Actions</th></tr></thead><tbody>' +
+    entries.map(e => renderCloserRow(e)).join('') + '</tbody></table>';
+}
+
+function renderCloserRow(e) {
+  if (editingId === e.id) {
+    return `<tr class="edit-row" id="edit-${e.id}"><td><input type="date" id="ed-${e.id}-date" value="${e.date}"></td><td><input type="number" id="ed-${e.id}-booked" value="${e.calls_booked || 0}" style="width:60px"></td><td><input type="number" id="ed-${e.id}-showed" value="${e.calls_showed || 0}" style="width:60px"></td><td><input type="number" id="ed-${e.id}-closed" value="${e.calls_closed || 0}" style="width:60px"></td><td><input type="text" id="ed-${e.id}-ad" value="${e.ad_calls_booked || 0}/${e.ad_calls_showed || 0}/${e.ad_calls_closed || 0}" style="width:70px;font-size:11px" placeholder="B/S/C"></td><td><input type="text" id="ed-${e.id}-org" value="${e.organic_calls_booked || 0}/${e.organic_calls_showed || 0}/${e.organic_calls_closed || 0}" style="width:70px;font-size:11px" placeholder="B/S/C"></td><td><input type="number" id="ed-${e.id}-rev" value="${e.revenue_collected || 0}" step="0.01" style="width:80px"></td><td><input type="url" id="ed-${e.id}-link" value="${e.call_link || ''}" placeholder="Link"></td><td><button class="btn btn-sm btn-save" onclick="saveEdit(${e.id})">Save</button><button class="btn btn-sm btn-cancel" onclick="cancelEdit()">Cancel</button></td></tr>`;
+  }
+  const linkCell = e.call_link ? `<a href="${e.call_link}" target="_blank" style="color:#3b82f6;font-size:12px">View</a>` : '-';
+  const canEdit = currentUser.role === 'admin' || e.closer_name === currentUser.name;
+  const adCell = `${e.ad_calls_booked || 0}/${e.ad_calls_showed || 0}/${e.ad_calls_closed || 0}`;
+  const orgCell = `${e.organic_calls_booked || 0}/${e.organic_calls_showed || 0}/${e.organic_calls_closed || 0}`;
+  return `<tr><td>${e.date}</td><td>${e.calls_booked || 0}</td><td>${e.calls_showed || 0}</td><td>${e.calls_closed || 0}</td><td style="font-size:12px;color:#93c5fd">${adCell}</td><td style="font-size:12px;color:#86efac">${orgCell}</td><td>${(e.revenue_collected || 0).toLocaleString()}</td><td>${linkCell}</td><td>${canEdit ? `<button class="btn btn-sm btn-edit" onclick="startEdit(${e.id})">Edit</button>` : ''}${currentUser.role === 'admin' ? `<button class="btn btn-sm btn-delete" onclick="deleteEntry(${e.id})">Delete</button>` : ''}</td></tr>`;
+}
+
+function startEdit(id) { editingId = id; loadCloserEntries(); }
+function cancelEdit() { editingId = null; loadCloserEntries(); }
+
+async function saveEdit(id) {
+  const adParts = (document.getElementById(`ed-${id}-ad`).value || '0/0/0').split('/');
+  const orgParts = (document.getElementById(`ed-${id}-org`).value || '0/0/0').split('/');
+  const body = {
+    id: id,
+    date: document.getElementById(`ed-${id}-date`).value,
+    calls_booked: parseInt(document.getElementById(`ed-${id}-booked`).value) || 0,
+    calls_showed: parseInt(document.getElementById(`ed-${id}-showed`).value) || 0,
+    calls_closed: parseInt(document.getElementById(`ed-${id}-closed`).value) || 0,
+    ad_calls_booked: parseInt(adParts[0]) || 0,
+    ad_calls_showed: parseInt(adParts[1]) || 0,
+    ad_calls_closed: parseInt(adParts[2]) || 0,
+    organic_calls_booked: parseInt(orgParts[0]) || 0,
+    organic_calls_showed: parseInt(orgParts[1]) || 0,
+    organic_calls_closed: parseInt(orgParts[2]) || 0,
+    revenue_collected: parseFloat(document.getElementById(`ed-${id}-rev`).value) || 0,
+    call_link: document.getElementById(`ed-${id}-link`).value,
+  };
+  await fetch('/api/eod/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  editingId = null;
+  loadCloserEntries();
+}
+
+async function deleteEntry(id) {
+  if (!confirm('Delete this EOD entry?')) return;
+  await fetch(`/api/eod/${id}`, { method: 'DELETE' });
+  loadCloserEntries();
+}
+
+async function loadSetterEntries() {
+  const resp = await fetch('/api/eod/setter');
+  const entries = await resp.json();
+  const el = document.getElementById('setterEntries');
+  if (!entries || entries.length === 0) {
+    el.innerHTML = '<div class="empty">No setter EOD entries yet.</div>';
+    return;
+  }
+  el.innerHTML = '<table class="entries-table"><thead><tr><th>Date</th><th>Setter</th><th>Outreach</th><th>Replies</th><th>Booked</th><th>Showed</th><th>Closed</th></tr></thead><tbody>' +
+    entries.map(e => `<tr><td>${e.date}</td><td>${e.setter_name}</td><td>${e.outreach_sent || 0}</td><td>${e.replies_received || 0}</td><td>${e.calls_booked || 0}</td><td>${e.calls_showed || 0}</td><td>${e.calls_closed || 0}</td></tr>`).join('') +
+    '</tbody></table>';
+}
+
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  window.location.href = '/login';
+}
+
+init();
+</script>
+</body>
+</html>
