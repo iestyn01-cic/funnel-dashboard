@@ -9,7 +9,7 @@ import hashlib
 import secrets
 import urllib.request
 from datetime import datetime, timezone, timedelta
-from flask import Flask, request, jsonify, send_file, redirect, session
+from flask import Flask, request, jsonify, send_file, send_from_directory, redirect, session
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
@@ -159,6 +159,192 @@ def api_init_db():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+# ============================================================
+# DASHBOARD DATA (JSON file-based, for webhook + dashboard.html)
+# ============================================================
+def load_data():
+    """Load the current dashboard data from JSON file."""
+    try:
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def save_data(data):
+    """Save dashboard data to JSON file."""
+    data["last_updated"] = datetime.now(timezone.utc).isoformat()
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+def deep_merge(base, update):
+    """Recursively merge update dict into base dict."""
+    for key, value in update.items():
+        if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+            deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+def safe_div(numerator, denominator):
+    """Safe division returning 0 on divide-by-zero."""
+    try:
+        if denominator and denominator != 0:
+            return round(numerator / denominator, 2)
+    except (TypeError, ZeroDivisionError):
+        pass
+    return 0
+
+# ============================================================
+# DASHBOARD ROUTES
+# ============================================================
+@app.route("/")
+def dashboard():
+    return send_from_directory(BASE_DIR, "dashboard.html")
+
+@app.route("/dashboard_data.json")
+def data_endpoint():
+    return send_from_directory(BASE_DIR, "dashboard_data.json")
+
+# ============================================================
+# WEBHOOK RECEIVER
+# ============================================================
+@app.route("/webhook", methods=["POST"])
+def receive_webhook():
+    """Receive data from automation and update the dashboard."""
+    try:
+        payload = request.get_json(force=True, silent=True)
+        if not payload:
+            return jsonify({"status": "error", "message": "No JSON body received"}), 400
+
+        timeframe = payload.get("timeframe", "daily").lower()
+        category = payload.get("category", "").lower()
+        data = payload.get("data", {})
+
+        if timeframe not in ("daily", "weekly", "monthly"):
+            return jsonify({"status": "error", "message": f"Invalid timeframe: {timeframe}"}), 400
+
+        if category not in ("ads", "funnel", "sales", "closers", "setters"):
+            return jsonify({"status": "error", "message": f"Invalid category: {category}"}), 400
+
+        if not data:
+            return jsonify({"status": "error", "message": "No data provided"}), 400
+
+        dashboard_data = load_data()
+
+        if category in ("closers", "setters"):
+            person_name = data.get("name", "").strip()
+            if not person_name:
+                return jsonify({"status": "error", "message": "Closers/setters require a 'name' field"}), 400
+
+            people_list = dashboard_data.get(timeframe, {}).get(category, [])
+            if not isinstance(people_list, list):
+                people_list = []
+
+            existing = None
+            for p in people_list:
+                if p.get("name", "").lower() == person_name.lower():
+                    existing = p
+                    break
+
+            if existing:
+                deep_merge(existing, data)
+            else:
+                people_list.append(data)
+
+            dashboard_data.setdefault(timeframe, {})[category] = people_list
+        else:
+            if timeframe not in dashboard_data:
+                dashboard_data[timeframe] = {}
+            if category not in dashboard_data[timeframe]:
+                dashboard_data[timeframe][category] = {}
+            deep_merge(dashboard_data[timeframe][category], data)
+
+        recalculate_keystones(dashboard_data)
+        recalculate_derived_metrics(dashboard_data)
+        save_data(dashboard_data)
+
+        return jsonify({
+            "status": "success",
+            "message": f"Updated {timeframe}.{category}",
+            "last_updated": dashboard_data["last_updated"]
+        }), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/webhook/status", methods=["GET"])
+def webhook_status():
+    """Health check endpoint."""
+    data = load_data()
+    return jsonify({
+        "status": "online",
+        "last_updated": data.get("last_updated", "never"),
+        "data_file": DATA_FILE
+    }), 200
+
+# ============================================================
+# KEYSTONE CALCULATIONS
+# ============================================================
+def recalculate_keystones(dashboard_data):
+    """Recalculate keystone metrics for weekly and monthly."""
+    for tf in ("weekly", "monthly"):
+        if tf not in dashboard_data:
+            continue
+        ads = dashboard_data[tf].get("ads", {})
+        sales = dashboard_data[tf].get("sales", {})
+        spend = ads.get("spend", 0) or 0
+        calls_booked = sales.get("calls_booked", 0) or 0
+        calls_showed = sales.get("calls_showed", 0) or 0
+        calls_closed = sales.get("calls_closed", 0) or 0
+        revenue = sales.get("revenue_collected", 0) or 0
+        keystone = {
+            "roas": safe_div(revenue, spend),
+            "cost_per_booked_call": safe_div(spend, calls_booked),
+            "cost_per_showed_call": safe_div(spend, calls_showed),
+            "cost_per_closed_deal": safe_div(spend, calls_closed),
+            "collected_per_booked_call": safe_div(revenue, calls_booked),
+            "collected_per_showed_call": safe_div(revenue, calls_showed),
+        }
+        dashboard_data[tf]["keystone"] = keystone
+
+def recalculate_derived_metrics(dashboard_data):
+    """Auto-calculate derived metrics from raw inputs."""
+    for tf in ("daily", "weekly", "monthly"):
+        if tf not in dashboard_data:
+            continue
+        ads = dashboard_data[tf].get("ads", {})
+        funnel = dashboard_data[tf].get("funnel", {})
+        sales = dashboard_data[tf].get("sales", {})
+        spend = ads.get("spend", 0) or 0
+        impressions = ads.get("impressions", 0) or 0
+        link_clicks = ads.get("link_clicks", 0) or 0
+        leads = ads.get("leads", 0) or 0
+        if impressions > 0:
+            ads["cpm"] = round((spend / impressions) * 1000, 2)
+        if impressions > 0:
+            ads["link_ctr"] = round((link_clicks / impressions) * 100, 2)
+        if link_clicks > 0:
+            ads["cpc"] = round(spend / link_clicks, 2)
+        if leads > 0:
+            ads["cost_per_lead"] = round(spend / leads, 2)
+        page_views = funnel.get("page_views", 0) or 0
+        form_submissions = funnel.get("form_submissions", 0) or 0
+        calls_booked_funnel = funnel.get("calls_booked", 0) or 0
+        if page_views > 0:
+            funnel["page_conversion_rate"] = round((form_submissions / page_views) * 100, 2)
+        if form_submissions > 0:
+            funnel["booking_rate"] = round((calls_booked_funnel / form_submissions) * 100, 2)
+        calls_booked = sales.get("calls_booked", 0) or 0
+        calls_showed = sales.get("calls_showed", 0) or 0
+        calls_closed = sales.get("calls_closed", 0) or 0
+        revenue = sales.get("revenue_collected", 0) or 0
+        if calls_booked > 0:
+            sales["show_rate"] = round((calls_showed / calls_booked) * 100, 2)
+        if calls_showed > 0:
+            sales["close_rate"] = round((calls_closed / calls_showed) * 100, 2)
+        if calls_closed > 0:
+            sales["aov"] = round(revenue / calls_closed, 2)
+
 if __name__ == "__main__":
     print("\n  Funnel Tracking Dashboard Server")
     print("  ============================================================")
@@ -166,6 +352,7 @@ if __name__ == "__main__":
     print(f"  Login URL:      http://localhost:{PORT}/login")
     print(f"  EOD URL:        http://localhost:{PORT}/eod")
     print(f"  Call Analysis:  http://localhost:{PORT}/call-analysis")
+    print(f"  Webhook URL:    http://localhost:{PORT}/webhook")
     print(f"  Cron Wistia:    http://localhost:{PORT}/cron/update-wistia")
     print(f"  Cron All:       http://localhost:{PORT}/cron/update-all")
     print(f"\n  Press Ctrl+C to stop\n")
