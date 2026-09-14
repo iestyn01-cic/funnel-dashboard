@@ -31,8 +31,28 @@ DATA_FILE = os.path.join(BASE_DIR, "dashboard_data.json")
 def get_db():
     if not DATABASE_URL:
         return None
-    import psycopg2
-    return psycopg2.connect(DATABASE_URL)
+    try:
+        import psycopg2
+        return psycopg2.connect(DATABASE_URL, connect_timeout=10)
+    except Exception as e:
+        print(f"DB connection error: {e}")
+        return None
+
+def db_status():
+    """Return diagnostic info about the database connection."""
+    if not DATABASE_URL:
+        return {"configured": False, "connected": False, "error": "DATABASE_URL not set"}
+    try:
+        import psycopg2
+        conn = psycopg2.connect(DATABASE_URL, connect_timeout=10)
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM users;")
+        user_count = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        return {"configured": True, "connected": True, "users": user_count, "error": None}
+    except Exception as e:
+        return {"configured": True, "connected": False, "error": str(e)}
 
 def init_db():
     conn = get_db()
@@ -76,7 +96,6 @@ def init_db():
             updated_at TIMESTAMP DEFAULT NOW()
         );
     """)
-    # Add ad/organic call breakdown columns if they don't exist
     try:
         cur.execute("ALTER TABLE eod_entries ADD COLUMN IF NOT EXISTS ad_calls_booked INT DEFAULT 0;")
         cur.execute("ALTER TABLE eod_entries ADD COLUMN IF NOT EXISTS ad_calls_showed INT DEFAULT 0;")
@@ -114,7 +133,6 @@ def init_db():
             created_at TIMESTAMP DEFAULT NOW()
         );
     """)
-    # Seed default admin if no users exist
     cur.execute("SELECT COUNT(*) FROM users WHERE role = 'admin';")
     if cur.fetchone()[0] == 0:
         admin_pass = hashlib.sha256("admin123".encode()).hexdigest()
@@ -252,7 +270,6 @@ def recalculate_derived(data):
 # EOD AGGREGATION
 # ============================================================
 def aggregate_eod_to_sales(data):
-    """Roll up EOD entries into the sales layer for each timeframe."""
     conn = get_db()
     entries = []
     setter_entries = []
@@ -386,22 +403,27 @@ def api_login():
     body = request.get_json(force=True, silent=True) or {}
     email = body.get("email", "").strip().lower()
     password = body.get("password", "")
-    conn = get_db()
-    if not conn:
-        return jsonify({"error": "Database not configured"}), 500
-    cur = conn.cursor()
-    cur.execute("SELECT id, email, password_hash, name, role FROM users WHERE email = %s;", (email,))
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
-    if not row or row[2] != hash_password(password):
-        return jsonify({"error": "Invalid credentials"}), 401
-    session.permanent = True
-    session["user_id"] = row[0]
-    session["email"] = row[1]
-    session["name"] = row[3]
-    session["role"] = row[4]
-    return jsonify({"status": "ok", "user": {"name": row[3], "role": row[4], "email": row[1]}})
+    try:
+        conn = get_db()
+        if not conn:
+            status = db_status()
+            return jsonify({"error": f"Database connection failed: {status.get('error', 'unknown')}"}), 500
+        cur = conn.cursor()
+        cur.execute("SELECT id, email, password_hash, name, role FROM users WHERE email = %s;", (email,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if not row or row[2] != hash_password(password):
+            return jsonify({"error": "Invalid credentials"}), 401
+        session.permanent = True
+        session["user_id"] = row[0]
+        session["email"] = row[1]
+        session["name"] = row[3]
+        session["role"] = row[4]
+        return jsonify({"status": "ok", "user": {"name": row[3], "role": row[4], "email": row[1]}})
+    except Exception as e:
+        print(f"Login error: {e}")
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
 
 @app.route("/api/auth/logout", methods=["POST"])
 def api_logout():
@@ -445,6 +467,10 @@ def api_register():
     conn.close()
     return jsonify({"status": "ok", "message": f"Created {role} account for {name}"})
 
+@app.route("/api/db-status")
+def api_db_status():
+    return jsonify(db_status())
+
 # ============================================================
 # API - DASHBOARD DATA
 # ============================================================
@@ -468,7 +494,7 @@ def get_dashboard_data():
 def webhook():
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     if AUTH_TOKEN and token != AUTH_TOKEN:
-        pass  # Allow without token for now (cron uses CRON_SECRET)
+        pass
     body = request.get_json(force=True, silent=True) or {}
     timeframe = body.get("timeframe")
     category = body.get("category")
@@ -717,14 +743,14 @@ def api_update_setter_eod():
     sets.append("updated_at = NOW()")
     vals.append(entry_id)
     cur.execute(f"UPDATE setter_eod_entries SET {', '.join(sets)} WHERE id = %s;", vals)
-    conn.comit()
+    conn.commit()
     cur.close()
     conn.close()
     return jsonify({"status": "ok"})
 
 # ============================================================
 # API - CALL LINKS
-# =============================================================
+# ============================================================
 @app.route("/api/call-links", methods=["GET"])
 def api_get_call_links():
     if not check_auth():
@@ -801,7 +827,6 @@ def cron_update_all():
     if secret != CRON_SECRET and not request.args.get("force"):
         return jsonify({"error": "Unauthorized"}), 401
     results = {}
-    # Wistia
     wistia = pull_wistia()
     if wistia:
         results["wistia"] = "ok"
@@ -814,19 +839,23 @@ def cron_update_all():
         save_data(data)
     else:
         results["wistia"] = "failed"
-    # Meta ads data is pushed by the agent scheduled trigger
     results["meta"] = "handled_by_agent_trigger"
     return jsonify({"status": "ok", "results": results})
 
 # ============================================================
 # MAIN
 # ============================================================
-if __name__ == "__main__":
+
+try:
     if DATABASE_URL:
         print("  Database: PostgreSQL (persistent)")
         init_db()
     else:
         print("  Database: File-based (NOT persistent - set DATABASE_URL)")
+except Exception as e:
+    print(f"  Database init error (non-fatal): {e}")
+
+if __name__ == "__main__":
     print(f"\n  Funnel Tracking Dashboard Server")
     print(f"  =================================")
     print(f"  Dashboard URL:  http://localhost:{PORT}/")
